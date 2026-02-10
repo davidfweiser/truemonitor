@@ -151,6 +151,9 @@ class TrueNASClient:
     def get_interfaces(self):
         return self._get("interface")
 
+    def get_alerts(self):
+        return self._get("alert/list")
+
     def get_reporting_data(self, graphs):
         now = datetime.now(timezone.utc)
         start = now - timedelta(seconds=120)
@@ -405,6 +408,7 @@ class TrueMonitorApp:
         self._temp_alert_active = False
         self._cpu_alert_active = False
         self._mem_alert_active = False
+        self._seen_truenas_alerts = set()
 
         self._setup_styles()
         self._build_ui()
@@ -993,6 +997,60 @@ class TrueMonitorApp:
                         "resolved",
                         f"Memory usage back to normal: {mem_pct}%")
 
+        # --- TrueNAS system alerts ---
+        self._fetch_truenas_alerts()
+
+    def _fetch_truenas_alerts(self):
+        """Pull alerts from TrueNAS alert/list API."""
+        if not self.client:
+            return
+        try:
+            alerts = self.client.get_alerts()
+            if not isinstance(alerts, list):
+                return
+
+            # Track which alerts are currently active on TrueNAS
+            current_ids = set()
+            for alert in alerts:
+                if not isinstance(alert, dict):
+                    continue
+                alert_id = alert.get("uuid") or alert.get("id") or str(alert)
+                current_ids.add(alert_id)
+
+                if alert_id in self._seen_truenas_alerts:
+                    continue  # already processed
+
+                self._seen_truenas_alerts.add(alert_id)
+
+                # Map TrueNAS severity to our severity
+                level = alert.get("level", "INFO").upper()
+                if level in ("CRITICAL", "ERROR"):
+                    severity = "critical"
+                elif level == "WARNING":
+                    severity = "warning"
+                else:
+                    severity = "info"
+
+                klass = alert.get("klass", "")
+                msg = alert.get("formatted", "") or alert.get("text", "")
+                if not msg:
+                    msg = klass or "Unknown TrueNAS alert"
+
+                show_popup = severity in ("critical", "warning")
+                self._add_alert(
+                    severity,
+                    f"[TrueNAS] {msg}",
+                    popup=show_popup, sound=show_popup)
+
+            # Check for dismissed/resolved alerts
+            resolved = self._seen_truenas_alerts - current_ids
+            for alert_id in resolved:
+                self._seen_truenas_alerts.discard(alert_id)
+                self._add_alert("resolved", "[TrueNAS] Alert cleared")
+
+        except Exception as e:
+            debug(f" truenas alerts error: {e}")
+
     def _build_settings(self):
         c = tk.Frame(self.set_frame, bg=COLORS["bg"], padx=28, pady=20)
         c.pack(fill=tk.BOTH, expand=True)
@@ -1192,6 +1250,7 @@ class TrueMonitorApp:
         self._temp_alert_active = False
         self._cpu_alert_active = False
         self._mem_alert_active = False
+        self._seen_truenas_alerts.clear()
         self.notebook.tab(1, text="  Alerts  ")
         self.info_lbl.config(text="Connect to TrueNAS to begin monitoring")
         self.footer.config(text="")
