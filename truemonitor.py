@@ -29,6 +29,7 @@ except ImportError:
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 DEBUG_LOG = os.path.join(CONFIG_DIR, "debug.log")
+ALERT_LOG = os.path.join(CONFIG_DIR, "alerts.log")
 
 def debug(msg):
     os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -829,16 +830,54 @@ class TrueMonitorApp:
         self.alert_listbox.tag_configure("timestamp",
                                          foreground=COLORS["text_dim"])
 
+        # Load previous alerts from log file
+        self._load_alerts_from_file()
+
+    def _load_alerts_from_file(self):
+        if not os.path.exists(ALERT_LOG):
+            return
+        try:
+            with open(ALERT_LOG) as f:
+                lines = f.readlines()
+            self.alert_listbox.config(state=tk.NORMAL)
+            for line in lines:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                # Determine severity tag from the line
+                tag = "info"
+                for key, sev in (("CRITICAL:", "critical"), ("WARNING:", "warning"),
+                                 ("RESOLVED:", "resolved"), ("INFO:", "info")):
+                    if key in line:
+                        tag = sev
+                        break
+                self.alert_listbox.insert(tk.END, line + "\n", tag)
+                self.alerts.append({"raw": line})
+            self.alert_listbox.config(state=tk.DISABLED)
+            count = len(self.alerts)
+            self.alert_count_lbl.config(
+                text=f"{count} alert{'s' if count != 1 else ''}")
+        except Exception:
+            pass
+
     def _add_alert(self, severity, message, popup=False, sound=False):
         """Add an alert to the log. severity: critical, warning, info, resolved"""
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry = {"time": ts, "severity": severity, "message": message}
         self.alerts.append(entry)
 
-        # Update the text widget
-        self.alert_listbox.config(state=tk.NORMAL)
+        # Persist to log file
         prefix = {"critical": "CRITICAL", "warning": "WARNING",
                   "info": "INFO", "resolved": "RESOLVED"}.get(severity, "INFO")
+        try:
+            os.makedirs(CONFIG_DIR, exist_ok=True)
+            with open(ALERT_LOG, "a") as f:
+                f.write(f"[{ts}] {prefix}: {message}\n")
+        except Exception:
+            pass
+
+        # Update the text widget
+        self.alert_listbox.config(state=tk.NORMAL)
         self.alert_listbox.insert(
             "1.0", f"[{ts}] ", "timestamp")
         self.alert_listbox.insert(
@@ -894,6 +933,12 @@ class TrueMonitorApp:
         self.alert_listbox.config(state=tk.DISABLED)
         self.alert_count_lbl.config(text="0 alerts")
         self.notebook.tab(1, text="  Alerts  ")
+        # Clear the log file
+        try:
+            with open(ALERT_LOG, "w") as f:
+                f.write("")
+        except Exception:
+            pass
 
     def _check_alerts(self, stats):
         """Check stats and fire alerts as needed."""
