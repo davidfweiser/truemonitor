@@ -395,6 +395,36 @@ class TrueNASClient:
                 total = p.get("size")
                 allocated = p.get("allocated")
                 free = p.get("free")
+                # Extract disk info from topology
+                disks = []
+                for topo_key in ("data", "cache", "log", "spare"):
+                    vdevs = topology.get(topo_key, [])
+                    if not isinstance(vdevs, list):
+                        continue
+                    for vdev in vdevs:
+                        if not isinstance(vdev, dict):
+                            continue
+                        children = vdev.get("children", [])
+                        # If no children, the vdev itself is the disk
+                        members = children if children else [vdev]
+                        for member in members:
+                            if not isinstance(member, dict):
+                                continue
+                            disk_name = member.get("disk") or member.get("name", "")
+                            if not disk_name:
+                                continue
+                            m_stats = member.get("stats", {})
+                            read_err = m_stats.get("read_errors", 0) or 0
+                            write_err = m_stats.get("write_errors", 0) or 0
+                            cksum_err = m_stats.get("checksum_errors", 0) or 0
+                            status = member.get("status", "ONLINE")
+                            has_error = (read_err + write_err + cksum_err > 0
+                                         or status not in ("ONLINE", ""))
+                            disks.append({
+                                "name": disk_name,
+                                "has_error": has_error,
+                            })
+
                 if total and allocated is not None:
                     pct = round(allocated / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
@@ -403,12 +433,45 @@ class TrueNASClient:
                         "available": free or (total - allocated),
                         "total": total,
                         "percent": pct,
+                        "disks": disks,
                     })
         except Exception as e:
             debug(f" pool error: {e}")
 
         debug(f" final stats: {stats}")
         return stats
+
+
+# ---------------------------------------------------------------------------
+# Tooltip helper
+# ---------------------------------------------------------------------------
+class _Tooltip:
+    """Lightweight tooltip that shows on mouse hover."""
+
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self._tw = None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+
+    def _show(self, event=None):
+        x = self.widget.winfo_rootx() + self.widget.winfo_width() // 2
+        y = self.widget.winfo_rooty() - 24
+        tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        lbl = tk.Label(
+            tw, text=self.text, bg="#333344", fg="#e0e0e0",
+            font=("Helvetica", 9), padx=6, pady=2, relief="solid", bd=1,
+        )
+        lbl.pack()
+        self._tw = tw
+
+    def _hide(self, event=None):
+        if self._tw:
+            self._tw.destroy()
+            self._tw = None
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +594,28 @@ class TrueMonitorApp:
             borderwidth=0,
             thickness=20,
         )
+        s.configure(
+            "Settings.TCombobox",
+            fieldbackground=COLORS["input_bg"],
+            background=COLORS["card"],
+            foreground=COLORS["text"],
+            arrowcolor=COLORS["text"],
+            selectbackground=COLORS["input_bg"],
+            selectforeground=COLORS["text"],
+        )
+        s.map(
+            "Settings.TCombobox",
+            fieldbackground=[("readonly", COLORS["input_bg"])],
+            foreground=[("readonly", COLORS["text"])],
+            selectbackground=[("readonly", COLORS["input_bg"])],
+            selectforeground=[("readonly", COLORS["text"])],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", COLORS["input_bg"])
+        self.root.option_add("*TCombobox*Listbox.foreground", COLORS["text"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", COLORS["card_border"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", COLORS["text"])
+        self.root.option_add("*TCombobox*Listbox.font", ("Helvetica", 11))
+
         for color_name, color_val in (("green", COLORS["good"]),
                                        ("yellow", COLORS["warning"]),
                                        ("red", COLORS["critical"])):
@@ -873,9 +958,33 @@ class TrueMonitorApp:
             )
             bar.pack(fill=tk.X, pady=(10, 0))
 
+            # Disk health indicator row
+            disk_frame = tk.Frame(f, bg=COLORS["card"])
+            disk_frame.pack(anchor="w", pady=(8, 0))
+            disk_label = tk.Label(
+                disk_frame, text="Disks:", bg=COLORS["card"],
+                fg=COLORS["text_dim"], font=("Helvetica", 9),
+            )
+            disk_label.pack(side=tk.LEFT, padx=(0, 6))
+
+            disk_rects = []
+            disks = pool.get("disks", [])
+            for disk in disks:
+                color = COLORS["critical"] if disk["has_error"] else COLORS["good"]
+                rect = tk.Frame(
+                    disk_frame, bg=color, width=12, height=24,
+                    highlightbackground=COLORS["card_border"],
+                    highlightthickness=1,
+                )
+                rect.pack_propagate(False)
+                rect.pack(side=tk.LEFT, padx=2)
+                _Tooltip(rect, disk["name"])
+                disk_rects.append(rect)
+
             self.pool_cards[name] = {
                 "frame": f, "value": val_lbl, "sub": sub_lbl,
                 "bar": bar, "bar_var": bar_var,
+                "disk_frame": disk_frame, "disk_rects": disk_rects,
             }
 
         # Resize window to fit pool rows
@@ -1012,25 +1121,41 @@ class TrueMonitorApp:
             messagebox.showwarning(title, f"{prefix}: {message}")
 
     def _play_warning_sound(self):
-        """Play a system warning sound."""
+        """Play a system warning sound (cross-platform)."""
+        import sys
         def _sound():
+            platform = sys.platform
             try:
-                # Try paplay (PulseAudio) with system alert sound
-                subprocess.run(
-                    ["paplay", "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"],
-                    timeout=3, capture_output=True)
-            except Exception:
-                try:
-                    # Fallback: aplay with beep
+                if platform == "win32":
+                    # Windows: use built-in winsound module
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                    return
+                elif platform == "darwin":
+                    # macOS: use afplay with system alert sound
+                    subprocess.run(
+                        ["afplay", "/System/Library/Sounds/Sosumi.aiff"],
+                        timeout=3, capture_output=True)
+                    return
+                else:
+                    # Linux: try paplay (PulseAudio)
+                    result = subprocess.run(
+                        ["paplay", "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"],
+                        timeout=3, capture_output=True)
+                    if result.returncode == 0:
+                        return
+                    # Linux fallback: aplay
                     subprocess.run(
                         ["aplay", "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"],
                         timeout=3, capture_output=True)
-                except Exception:
-                    try:
-                        # Last resort: terminal bell
-                        print("\a", end="", flush=True)
-                    except Exception:
-                        pass
+                    return
+            except Exception:
+                pass
+            # Last resort: terminal bell
+            try:
+                print("\a", end="", flush=True)
+            except Exception:
+                pass
         threading.Thread(target=_sound, daemon=True).start()
 
     def _clear_alerts(self):
@@ -1049,15 +1174,19 @@ class TrueMonitorApp:
 
     def _check_alerts(self, stats):
         """Check stats and fire alerts as needed."""
-        # --- CPU Temperature > 82°C ---
+        # --- CPU Temperature threshold (configurable) ---
+        try:
+            temp_limit = int(self.temp_threshold_var.get())
+        except (ValueError, TypeError):
+            temp_limit = self.config.get("temp_threshold", 82)
         temp = stats.get("cpu_temp")
         if temp is not None:
-            if temp > 82:
+            if temp > temp_limit:
                 if not self._temp_alert_active:
                     self._temp_alert_active = True
                     self._add_alert(
                         "critical",
-                        f"CPU temperature is {temp}\u00b0C (above 82\u00b0C threshold)!",
+                        f"CPU temperature is {temp}\u00b0C (above {temp_limit}\u00b0C threshold)!",
                         popup=True, sound=True)
             else:
                 if self._temp_alert_active:
@@ -1171,6 +1300,8 @@ class TrueMonitorApp:
         self.user_var = tk.StringVar()
         self.pass_var = tk.StringVar()
         self.interval_var = tk.StringVar(value="5")
+        self.temp_threshold_var = tk.StringVar(
+            value=str(self.config.get("temp_threshold", 82)))
 
         entry_kw = dict(
             bg=COLORS["input_bg"], fg=COLORS["text"],
@@ -1224,11 +1355,30 @@ class TrueMonitorApp:
                  **entry_kw).grid(row=r, column=1, sticky="w",
                                   pady=6, padx=(10, 0))
 
+        r = 7
+        tk.Label(c, text="--- alert thresholds ---", bg=COLORS["bg"],
+                 fg=COLORS["text_dim"],
+                 font=("Helvetica", 10)).grid(row=r, column=0,
+                                              columnspan=2, pady=14)
+
+        r = 8
+        ttk.Label(c, text="CPU Temp Alert (\u00b0C):",
+                  style="Settings.TLabel").grid(row=r, column=0,
+                                                sticky="w", pady=6)
+        temp_values = [str(t) for t in range(40, 97)]
+        self.temp_combo = ttk.Combobox(
+            c, textvariable=self.temp_threshold_var, values=temp_values,
+            width=6, state="readonly", style="Settings.TCombobox",
+            font=("Helvetica", 11),
+        )
+        self.temp_combo.grid(row=r, column=1, sticky="w", pady=6, padx=(10, 0))
+        self.temp_combo.bind("<<ComboboxSelected>>", self._on_temp_threshold_change)
+
         c.columnconfigure(1, weight=1)
 
         # buttons
         bf = tk.Frame(c, bg=COLORS["bg"])
-        bf.grid(row=7, column=0, columnspan=2, pady=26, sticky="w")
+        bf.grid(row=9, column=0, columnspan=2, pady=26, sticky="w")
 
         self.conn_btn = tk.Button(
             bf, text="Save & Connect", bg=COLORS["button"],
@@ -1260,6 +1410,18 @@ class TrueMonitorApp:
         self.user_var.set(self.config.get("username", ""))
         self.pass_var.set(self.config.get("password", ""))
         self.interval_var.set(str(self.config.get("interval", 5)))
+        self.temp_threshold_var.set(str(self.config.get("temp_threshold", 82)))
+
+    def _on_temp_threshold_change(self, event=None):
+        """Save the temperature threshold immediately when changed."""
+        try:
+            val = int(self.temp_threshold_var.get())
+        except ValueError:
+            return
+        self.config["temp_threshold"] = val
+        self._save_config()
+        # Reset the alert state so it re-evaluates with the new threshold
+        self._temp_alert_active = False
 
     # --- connection management ---
     def _on_save(self):
@@ -1281,10 +1443,16 @@ class TrueMonitorApp:
         except ValueError:
             iv_val = 5
 
+        try:
+            temp_thresh = max(1, int(self.temp_threshold_var.get().strip()))
+        except ValueError:
+            temp_thresh = 82
+
         self.config = {
             "host": host, "api_key": api_key,
             "username": user, "password": pw,
             "interval": iv_val,
+            "temp_threshold": temp_thresh,
         }
         self._save_config()
         self._connect()
@@ -1471,8 +1639,15 @@ class TrueMonitorApp:
         # Pool capacity
         pools = s.get("pools", [])
         if pools:
-            # Build cards if pool count changed
-            if len(pools) != self._pool_count:
+            # Build cards if pool count changed or disk count changed
+            rebuild = len(pools) != self._pool_count
+            if not rebuild:
+                for pool in pools:
+                    card = self.pool_cards.get(pool.get("name", ""))
+                    if card and len(card.get("disk_rects", [])) != len(pool.get("disks", [])):
+                        rebuild = True
+                        break
+            if rebuild:
                 self._build_pool_cards(pools)
             # Update each pool card
             for pool in pools:
@@ -1502,6 +1677,13 @@ class TrueMonitorApp:
                 card["sub"].config(
                     text=f"{format_bytes(used)} / {format_bytes(total)}  "
                          f"({format_bytes(avail)} free)")
+
+                # Update disk indicator colors
+                disks = pool.get("disks", [])
+                for i, rect in enumerate(card.get("disk_rects", [])):
+                    if i < len(disks):
+                        disk_col = COLORS["critical"] if disks[i]["has_error"] else COLORS["good"]
+                        rect.config(bg=disk_col)
 
         # Check alert conditions
         self._check_alerts(s)
@@ -1556,17 +1738,35 @@ class TrueMonitorApp:
                  "total": 8 * 1024**4,        # 8 TB
                  "used": int(5.2 * 1024**4),   # 5.2 TB
                  "available": int(2.8 * 1024**4),
-                 "percent": 65.0},
+                 "percent": 65.0,
+                 "disks": [
+                     {"name": "sda", "has_error": False},
+                     {"name": "sdb", "has_error": False},
+                     {"name": "sdc", "has_error": False},
+                     {"name": "sdd", "has_error": False},
+                 ]},
                 {"name": "fast-storage",
                  "total": 2 * 1024**4,         # 2 TB
                  "used": int(1.6 * 1024**4),   # 1.6 TB
                  "available": int(0.4 * 1024**4),
-                 "percent": 80.0},
+                 "percent": 80.0,
+                 "disks": [
+                     {"name": "nvme0n1", "has_error": False},
+                     {"name": "nvme1n1", "has_error": True},
+                 ]},
                 {"name": "backup",
                  "total": 16 * 1024**4,        # 16 TB
                  "used": int(14.5 * 1024**4),  # 14.5 TB
                  "available": int(1.5 * 1024**4),
-                 "percent": 90.6},
+                 "percent": 90.6,
+                 "disks": [
+                     {"name": "sde", "has_error": False},
+                     {"name": "sdf", "has_error": False},
+                     {"name": "sdg", "has_error": False},
+                     {"name": "sdh", "has_error": False},
+                     {"name": "sdi", "has_error": False},
+                     {"name": "sdj", "has_error": False},
+                 ]},
             ]
 
             stats = {
