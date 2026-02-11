@@ -154,6 +154,9 @@ class TrueNASClient:
     def get_alerts(self):
         return self._get("alert/list")
 
+    def get_pools(self):
+        return self._get("pool")
+
     def get_reporting_data(self, graphs):
         now = datetime.now(timezone.utc)
         start = now - timedelta(seconds=120)
@@ -380,6 +383,30 @@ class TrueNASClient:
         except Exception as e:
             debug(f" network error: {e}")
 
+        # Pool capacity
+        stats["pools"] = []
+        try:
+            pools = self.get_pools()
+            for p in pools:
+                if not isinstance(p, dict):
+                    continue
+                topology = p.get("topology", {})
+                # Total size and allocated come from top-level pool fields
+                total = p.get("size")
+                allocated = p.get("allocated")
+                free = p.get("free")
+                if total and allocated is not None:
+                    pct = round(allocated / total * 100, 1) if total > 0 else 0
+                    stats["pools"].append({
+                        "name": p.get("name", "unknown"),
+                        "used": allocated,
+                        "available": free or (total - allocated),
+                        "total": total,
+                        "percent": pct,
+                    })
+        except Exception as e:
+            debug(f" pool error: {e}")
+
         debug(f" final stats: {stats}")
         return stats
 
@@ -409,6 +436,8 @@ class TrueMonitorApp:
         self._cpu_alert_active = False
         self._mem_alert_active = False
         self._seen_truenas_alerts = set()
+        self.pool_cards = {}
+        self._pool_count = 0
 
         self._setup_styles()
         self._build_ui()
@@ -502,6 +531,16 @@ class TrueMonitorApp:
             borderwidth=0,
             thickness=20,
         )
+        for color_name, color_val in (("green", COLORS["good"]),
+                                       ("yellow", COLORS["warning"]),
+                                       ("red", COLORS["critical"])):
+            s.configure(
+                f"Pool{color_name}.Horizontal.TProgressbar",
+                background=color_val,
+                troughcolor=COLORS["input_bg"],
+                borderwidth=0,
+                thickness=16,
+            )
 
     # --- UI construction ---
     def _build_ui(self):
@@ -580,17 +619,17 @@ class TrueMonitorApp:
         self.info_lbl.pack(anchor="w")
 
         # metric cards
-        grid = tk.Frame(self.mon_frame, bg=COLORS["bg"])
-        grid.pack(fill=tk.BOTH, expand=True, pady=8)
-        grid.columnconfigure(0, weight=1)
-        grid.columnconfigure(1, weight=1)
-        grid.rowconfigure(0, weight=1)
-        grid.rowconfigure(1, weight=1)
+        self.grid = tk.Frame(self.mon_frame, bg=COLORS["bg"])
+        self.grid.pack(fill=tk.BOTH, expand=True, pady=8)
+        self.grid.columnconfigure(0, weight=1)
+        self.grid.columnconfigure(1, weight=1)
+        self.grid.rowconfigure(0, weight=1)
+        self.grid.rowconfigure(1, weight=1)
 
-        self.cpu_card = self._make_card(grid, "CPU Usage", 0, 0)
-        self.mem_card = self._make_card(grid, "Memory", 0, 1)
-        self._build_net_graph(grid, 1, 0)
-        self._build_temp_graph(grid, 1, 1)
+        self.cpu_card = self._make_card(self.grid, "CPU Usage", 0, 0)
+        self.mem_card = self._make_card(self.grid, "Memory", 0, 1)
+        self._build_net_graph(self.grid, 1, 0)
+        self._build_temp_graph(self.grid, 1, 1)
 
     def _build_net_graph(self, parent, row, col):
         f = tk.Frame(
@@ -786,6 +825,70 @@ class TrueMonitorApp:
         lo = min(self.temp_history)
         hi = max(self.temp_history)
         self.temp_range_lbl.config(text=f"Low: {lo:.0f}\u00b0C  High: {hi:.0f}\u00b0C")
+
+    def _build_pool_cards(self, pools):
+        """Dynamically create pool capacity cards in the monitor grid."""
+        import math
+        # Remove existing pool card widgets
+        for card in self.pool_cards.values():
+            card["frame"].destroy()
+        self.pool_cards = {}
+
+        num_pools = len(pools)
+        if num_pools == 0:
+            return
+
+        self._pool_count = num_pools
+        pool_rows = math.ceil(num_pools / 2)
+
+        # Add row weights for pool rows (rows 2+)
+        for r in range(pool_rows):
+            self.grid.rowconfigure(2 + r, weight=1)
+
+        for i, pool in enumerate(pools):
+            row = 2 + i // 2
+            col = i % 2
+            name = pool.get("name", "unknown")
+
+            f = tk.Frame(
+                self.grid, bg=COLORS["card"],
+                highlightbackground=COLORS["card_border"], highlightthickness=1,
+                padx=18, pady=14,
+            )
+            f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
+
+            ttk.Label(f, text=f"Pool: {name}", style="CardTitle.TLabel").pack(
+                anchor="w")
+
+            val_lbl = ttk.Label(f, text="--", style="CardValue.TLabel")
+            val_lbl.pack(anchor="w", pady=(8, 2))
+
+            sub_lbl = ttk.Label(f, text="", style="CardSub.TLabel")
+            sub_lbl.pack(anchor="w")
+
+            bar_var = tk.DoubleVar(value=0)
+            bar = ttk.Progressbar(
+                f, variable=bar_var, maximum=100,
+                style="Poolgreen.Horizontal.TProgressbar", length=220,
+            )
+            bar.pack(fill=tk.X, pady=(10, 0))
+
+            self.pool_cards[name] = {
+                "frame": f, "value": val_lbl, "sub": sub_lbl,
+                "bar": bar, "bar_var": bar_var,
+            }
+
+        # Resize window to fit pool rows
+        pool_rows_total = math.ceil(num_pools / 2)
+        new_height = 750 + pool_rows_total * 200
+        cur_geo = self.root.geometry()
+        # Parse current width from geometry string
+        try:
+            width = int(cur_geo.split("x")[0])
+        except (ValueError, IndexError):
+            width = 1050
+        self.root.geometry(f"{width}x{new_height}")
+        self.root.minsize(900, 650 + pool_rows_total * 180)
 
     def _build_alerts_tab(self):
         # Header
@@ -1252,6 +1355,13 @@ class TrueMonitorApp:
         self._mem_alert_active = False
         self._seen_truenas_alerts.clear()
         self.notebook.tab(1, text="  Alerts  ")
+        for card in self.pool_cards.values():
+            card["frame"].destroy()
+        self.pool_cards = {}
+        self._pool_count = 0
+        # Reset window size back to default
+        self.root.geometry("1050x750")
+        self.root.minsize(900, 650)
         self.info_lbl.config(text="Connect to TrueNAS to begin monitoring")
         self.footer.config(text="")
 
@@ -1358,6 +1468,41 @@ class TrueMonitorApp:
             self.temp_val_lbl.config(text="N/A", fg=COLORS["text_dim"])
             self.temp_status_lbl.config(text="")
 
+        # Pool capacity
+        pools = s.get("pools", [])
+        if pools:
+            # Build cards if pool count changed
+            if len(pools) != self._pool_count:
+                self._build_pool_cards(pools)
+            # Update each pool card
+            for pool in pools:
+                name = pool.get("name", "unknown")
+                card = self.pool_cards.get(name)
+                if not card:
+                    continue
+                pct = pool.get("percent", 0)
+                used = pool.get("used", 0)
+                total = pool.get("total", 0)
+                avail = pool.get("available", 0)
+
+                # Color coding
+                if pct < 70:
+                    col = COLORS["good"]
+                    bar_style = "Poolgreen.Horizontal.TProgressbar"
+                elif pct < 85:
+                    col = COLORS["warning"]
+                    bar_style = "Poolyellow.Horizontal.TProgressbar"
+                else:
+                    col = COLORS["critical"]
+                    bar_style = "Poolred.Horizontal.TProgressbar"
+
+                card["value"].config(text=f"{pct}%", foreground=col)
+                card["bar_var"].set(pct)
+                card["bar"].config(style=bar_style)
+                card["sub"].config(
+                    text=f"{format_bytes(used)} / {format_bytes(total)}  "
+                         f"({format_bytes(avail)} free)")
+
         # Check alert conditions
         self._check_alerts(s)
 
@@ -1405,6 +1550,25 @@ class TrueMonitorApp:
             mem_total = 34_359_738_368  # 32 GB
             mem_used = mem_total * self._demo_mem / 100
 
+            # Simulated pool data
+            demo_pools = [
+                {"name": "tank",
+                 "total": 8 * 1024**4,        # 8 TB
+                 "used": int(5.2 * 1024**4),   # 5.2 TB
+                 "available": int(2.8 * 1024**4),
+                 "percent": 65.0},
+                {"name": "fast-storage",
+                 "total": 2 * 1024**4,         # 2 TB
+                 "used": int(1.6 * 1024**4),   # 1.6 TB
+                 "available": int(0.4 * 1024**4),
+                 "percent": 80.0},
+                {"name": "backup",
+                 "total": 16 * 1024**4,        # 16 TB
+                 "used": int(14.5 * 1024**4),  # 14.5 TB
+                 "available": int(1.5 * 1024**4),
+                 "percent": 90.6},
+            ]
+
             stats = {
                 "cpu_percent": round(self._demo_cpu, 1),
                 "memory_used": mem_used,
@@ -1422,6 +1586,7 @@ class TrueMonitorApp:
                     round(self._demo_cpu / 30, 2),
                     round(self._demo_cpu / 40, 2),
                 ],
+                "pools": demo_pools,
             }
             self.root.after(0, lambda s=stats: self._refresh(s))
             time.sleep(2)
