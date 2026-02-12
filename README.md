@@ -1,4 +1,4 @@
-# TrueMonitor
+# TrueMonitor v0.1
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkinter, TrueMonitor provides a dark-themed GUI that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
@@ -11,6 +11,7 @@ A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkin
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
 - **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%)
 - **Disk Health Indicators** - Each pool card displays small colored rectangles for every disk in the pool. Green indicates a healthy disk, red indicates errors (read/write/checksum errors or non-ONLINE status). Hover over a rectangle to see the drive name.
+- **Drive Map** - Each pool card has a "Drive Map" button that opens a popup window showing the complete vdev layout. Displays how drives are organized (Mirror, RAIDZ1/2/3, Stripe), along with cache, log, and spare groups. Drives with errors are highlighted in red.
 
 ### Alerts Tab
 - Automatic alerts for configurable CPU temperature threshold, CPU usage >95%, and memory usage >95%
@@ -24,7 +25,8 @@ A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkin
 - **Connection**: IP address/hostname, API key or username/password authentication
 - **Poll Interval**: Configurable refresh rate (minimum 2 seconds)
 - **CPU Temp Alert Threshold**: Dropdown selector from 40°C to 96°C, saves immediately on change
-- **Demo Mode**: Preview the dashboard layout with simulated data
+- **Font Size**: Configurable font scaling with Small (85%), Medium (100%), and Large (115%) options. Persists across restarts.
+- **Demo Mode**: Preview the dashboard layout with simulated data including sample vdev topologies
 
 ## Requirements
 
@@ -44,7 +46,7 @@ Dependencies:
 ## Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/truemonitor.git
+git clone https://github.com/davidfweiser/truemonitor.git
 cd truemonitor
 pip install -r requirements.txt
 ```
@@ -65,7 +67,14 @@ The dashboard will connect and begin displaying real-time metrics on the Monitor
 
 ### Demo Mode
 
-Click **Demo Mode** in the Settings tab to preview the dashboard with simulated data. This is useful for seeing the layout without connecting to a TrueNAS server.
+Click **Demo Mode** in the Settings tab to preview the dashboard with simulated data. This is useful for seeing the layout without connecting to a TrueNAS server. Demo mode includes sample pools with Mirror, RAIDZ2, cache, and spare drive configurations.
+
+### Drive Map
+
+Click the **Drive Map** button on any pool card to see the complete vdev topology:
+- **Data VDevs** - Shows Mirror, RAIDZ, or Stripe configurations with all member disks
+- **Cache / Log / Spare** - Shows auxiliary vdev groups when present
+- **Disk Status** - Each drive shows its name, status, and error count. Drives with errors are highlighted in red.
 
 ## Cross-Platform Support
 
@@ -93,7 +102,7 @@ All configuration is stored in `~/.config/truemonitor/`:
 
 | File | Purpose |
 |------|---------|
-| `config.json` | Connection settings, credentials (encrypted), alert thresholds |
+| `config.json` | Connection settings, credentials (encrypted), alert thresholds, font size |
 | `alerts.log` | Persistent alert history |
 | `debug.log` | API debug output (cleared on each launch) |
 
@@ -105,8 +114,8 @@ Passwords and API keys are encrypted at rest using Fernet symmetric encryption. 
 
 TrueMonitor is a single-file application with two main classes:
 
-- **TrueNASClient** - REST API client that handles authentication, endpoint auto-detection, format caching, and data parsing for CPU, memory, network, temperature, pools, and system alerts
-- **TrueMonitorApp** - tkinter GUI with threaded background polling. Uses `root.after()` for thread-safe UI updates from the polling thread
+- **TrueNASClient** - REST API client that handles authentication, endpoint auto-detection, format caching, and data parsing for CPU, memory, network, temperature, pools (including vdev topology), and system alerts
+- **TrueMonitorApp** - tkinter GUI with threaded background polling. Uses `root.after()` for thread-safe UI updates from the polling thread. Supports dynamic UI rebuilds for font scaling.
 
 ## License
 
