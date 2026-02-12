@@ -29,6 +29,8 @@ except ImportError:
     print("  pip install requests")
     raise SystemExit(1)
 
+APP_VERSION = "0.1"
+
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 DEBUG_LOG = os.path.join(CONFIG_DIR, "debug.log")
@@ -428,6 +430,51 @@ class TrueNASClient:
                                 "has_error": has_error,
                             })
 
+                # Parse vdev structure for drive map
+                vdev_map = {}
+                for topo_key in ("data", "cache", "log", "spare", "special", "dedup"):
+                    vdevs = topology.get(topo_key, [])
+                    if not isinstance(vdevs, list) or not vdevs:
+                        continue
+                    vdev_list = []
+                    for vdev in vdevs:
+                        if not isinstance(vdev, dict):
+                            continue
+                        vtype = vdev.get("type", "STRIPE")
+                        vstatus = vdev.get("status", "ONLINE")
+                        children = vdev.get("children", [])
+                        child_list = []
+                        if children:
+                            for ch in children:
+                                if not isinstance(ch, dict):
+                                    continue
+                                ch_stats = ch.get("stats", {})
+                                errs = ((ch_stats.get("read_errors", 0) or 0)
+                                        + (ch_stats.get("write_errors", 0) or 0)
+                                        + (ch_stats.get("checksum_errors", 0) or 0))
+                                child_list.append({
+                                    "name": ch.get("disk") or ch.get("name", "?"),
+                                    "status": ch.get("status", "ONLINE"),
+                                    "errors": errs,
+                                })
+                        else:
+                            # Single-disk vdev (no children, vdev IS the disk)
+                            v_stats = vdev.get("stats", {})
+                            errs = ((v_stats.get("read_errors", 0) or 0)
+                                    + (v_stats.get("write_errors", 0) or 0)
+                                    + (v_stats.get("checksum_errors", 0) or 0))
+                            child_list.append({
+                                "name": vdev.get("disk") or vdev.get("name", "?"),
+                                "status": vstatus,
+                                "errors": errs,
+                            })
+                        vdev_list.append({
+                            "type": vtype,
+                            "status": vstatus,
+                            "disks": child_list,
+                        })
+                    vdev_map[topo_key] = vdev_list
+
                 if total and allocated is not None:
                     pct = round(allocated / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
@@ -437,6 +484,7 @@ class TrueNASClient:
                         "total": total,
                         "percent": pct,
                         "disks": disks,
+                        "topology": vdev_map,
                     })
         except Exception as e:
             debug(f" pool error: {e}")
@@ -669,9 +717,14 @@ class TrueMonitorApp:
         self._build_settings()
 
         # footer
-        self.footer = tk.Label(main, text="", bg=COLORS["bg"],
+        footer_frame = tk.Frame(main, bg=COLORS["bg"])
+        footer_frame.pack(fill=tk.X, pady=(6, 0))
+        self.footer = tk.Label(footer_frame, text="", bg=COLORS["bg"],
                                fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)))
-        self.footer.pack(fill=tk.X, pady=(6, 0))
+        self.footer.pack(side=tk.LEFT)
+        tk.Label(footer_frame, text=f"v{APP_VERSION}", bg=COLORS["bg"],
+                 fg=COLORS["text_dim"], font=("Helvetica", self._sf(8))
+        ).pack(side=tk.RIGHT)
 
     def _make_card(self, parent, title, row, col):
         f = tk.Frame(
@@ -952,8 +1005,19 @@ class TrueMonitorApp:
             )
             f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
 
-            ttk.Label(f, text=f"Pool: {name}", style="CardTitle.TLabel").pack(
-                anchor="w")
+            title_row = tk.Frame(f, bg=COLORS["card"])
+            title_row.pack(fill=tk.X)
+            ttk.Label(title_row, text=f"Pool: {name}", style="CardTitle.TLabel").pack(
+                side=tk.LEFT)
+            topo = pool.get("topology", {})
+            map_btn = tk.Button(
+                title_row, text="Drive Map", bg=COLORS["card_border"],
+                fg=COLORS["text"], activebackground=COLORS["button"],
+                activeforeground=COLORS["text"],
+                font=("Helvetica", self._sf(8)), relief="flat", padx=8, pady=2,
+                command=lambda n=name, t=topo: self._show_drive_map(n, t),
+            )
+            map_btn.pack(side=tk.RIGHT)
 
             val_lbl = ttk.Label(f, text="--", style="CardValue.TLabel")
             val_lbl.pack(anchor="w", pady=(8, 2))
@@ -995,6 +1059,7 @@ class TrueMonitorApp:
                 "frame": f, "value": val_lbl, "sub": sub_lbl,
                 "bar": bar, "bar_var": bar_var,
                 "disk_frame": disk_frame, "disk_rects": disk_rects,
+                "topology": topo, "map_btn": map_btn,
             }
 
         # Resize window to fit pool rows
@@ -1008,6 +1073,168 @@ class TrueMonitorApp:
             width = 1050
         self.root.geometry(f"{width}x{new_height}")
         self.root.minsize(900, 650 + pool_rows_total * 180)
+
+    def _show_drive_map(self, pool_name, topology):
+        """Open a popup window showing the vdev/drive layout of a pool."""
+        win = tk.Toplevel(self.root)
+        win.title(f"Drive Map - {pool_name}")
+        win.configure(bg=COLORS["bg"])
+        win.minsize(400, 200)
+
+        # Header
+        tk.Label(
+            win, text=f"Pool: {pool_name}", bg=COLORS["bg"],
+            fg=COLORS["accent"], font=("Helvetica", self._sf(16), "bold"),
+            padx=16, pady=12,
+        ).pack(anchor="w")
+
+        # Scrollable content
+        canvas = tk.Canvas(win, bg=COLORS["bg"], highlightthickness=0)
+        scrollbar = tk.Scrollbar(win, orient=tk.VERTICAL, command=canvas.yview)
+        content = tk.Frame(canvas, bg=COLORS["bg"])
+
+        content.bind("<Configure>",
+                     lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=content, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=16, pady=(0, 16))
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        if not topology:
+            tk.Label(
+                content, text="No topology data available",
+                bg=COLORS["bg"], fg=COLORS["text_dim"],
+                font=("Helvetica", self._sf(11)),
+            ).pack(pady=20)
+            return
+
+        group_labels = {
+            "data": "Data VDevs",
+            "cache": "Cache (L2ARC)",
+            "log": "Log (SLOG)",
+            "spare": "Hot Spares",
+            "special": "Special VDevs",
+            "dedup": "Dedup VDevs",
+        }
+
+        for group_key in ("data", "cache", "log", "spare", "special", "dedup"):
+            vdevs = topology.get(group_key, [])
+            if not vdevs:
+                continue
+
+            # Group header
+            group_frame = tk.Frame(content, bg=COLORS["bg"])
+            group_frame.pack(fill=tk.X, pady=(8, 4), padx=4)
+
+            tk.Label(
+                group_frame, text=group_labels.get(group_key, group_key),
+                bg=COLORS["bg"], fg=COLORS["accent"],
+                font=("Helvetica", self._sf(12), "bold"),
+            ).pack(anchor="w")
+
+            for vi, vdev in enumerate(vdevs):
+                vtype = vdev.get("type", "DISK")
+                vstatus = vdev.get("status", "ONLINE")
+                vdisks = vdev.get("disks", [])
+
+                # Vdev container
+                vdev_frame = tk.Frame(
+                    content, bg=COLORS["card"],
+                    highlightbackground=COLORS["card_border"],
+                    highlightthickness=1, padx=12, pady=8,
+                )
+                vdev_frame.pack(fill=tk.X, padx=12, pady=4)
+
+                # Vdev header row
+                vhdr = tk.Frame(vdev_frame, bg=COLORS["card"])
+                vhdr.pack(fill=tk.X)
+
+                # Vdev type label with icon
+                type_color = COLORS["accent"]
+                if vtype == "MIRROR":
+                    type_icon = "\u2194"  # ↔
+                elif vtype.startswith("RAIDZ"):
+                    type_icon = "\u2726"  # ✦
+                elif vtype == "STRIPE":
+                    type_icon = "\u2502"  # │
+                else:
+                    type_icon = "\u25cb"  # ○
+
+                tk.Label(
+                    vhdr, text=f" {type_icon}  {vtype}",
+                    bg=COLORS["card"], fg=type_color,
+                    font=("Helvetica", self._sf(11), "bold"),
+                ).pack(side=tk.LEFT)
+
+                # Status badge
+                st_color = COLORS["good"] if vstatus == "ONLINE" else COLORS["critical"]
+                tk.Label(
+                    vhdr, text=vstatus, bg=COLORS["card"], fg=st_color,
+                    font=("Helvetica", self._sf(9)),
+                ).pack(side=tk.RIGHT)
+
+                # Disk grid
+                disk_grid = tk.Frame(vdev_frame, bg=COLORS["card"])
+                disk_grid.pack(fill=tk.X, pady=(6, 0))
+
+                for di, disk in enumerate(vdisks):
+                    dname = disk.get("name", "?")
+                    dstatus = disk.get("status", "ONLINE")
+                    derrors = disk.get("errors", 0)
+
+                    has_err = derrors > 0 or dstatus not in ("ONLINE", "")
+                    disk_bg = "#1a2a1a" if not has_err else "#5c1a1a"
+                    border_col = COLORS["good"] if not has_err else COLORS["critical"]
+
+                    disk_box = tk.Frame(
+                        disk_grid, bg=disk_bg,
+                        highlightbackground=border_col, highlightthickness=2,
+                        padx=8, pady=4,
+                    )
+                    disk_box.pack(side=tk.LEFT, padx=4, pady=2)
+
+                    # Drive name
+                    name_fg = "#ffffff" if has_err else COLORS["text"]
+                    tk.Label(
+                        disk_box, text=dname, bg=disk_bg,
+                        fg=name_fg,
+                        font=("Helvetica", self._sf(10), "bold"),
+                    ).pack()
+
+                    # Status line
+                    status_text = dstatus
+                    if derrors > 0:
+                        status_text += f" ({derrors} err)"
+                    st_col = COLORS["good"] if not has_err else COLORS["critical"]
+                    tk.Label(
+                        disk_box, text=status_text, bg=disk_bg,
+                        fg=st_col, font=("Helvetica", self._sf(7)),
+                    ).pack()
+
+                    # Draw connecting line between disks in mirror/raidz
+                    if di < len(vdisks) - 1 and vtype in ("MIRROR", "RAIDZ1", "RAIDZ2", "RAIDZ3"):
+                        conn = tk.Label(
+                            disk_grid, text="\u2500\u2500",
+                            bg=COLORS["card"], fg=COLORS["card_border"],
+                            font=("Helvetica", self._sf(8)),
+                        )
+                        conn.pack(side=tk.LEFT)
+
+        # Close button
+        tk.Button(
+            win, text="Close", bg=COLORS["card"], fg=COLORS["text"],
+            activebackground=COLORS["card_border"],
+            activeforeground=COLORS["text"],
+            font=("Helvetica", self._sf(10)), relief="flat", padx=20, pady=6,
+            command=win.destroy,
+        ).pack(pady=(0, 12))
+
+        # Size window based on content
+        win.update_idletasks()
+        w = max(500, content.winfo_reqwidth() + 60)
+        h = min(700, content.winfo_reqheight() + 120)
+        win.geometry(f"{w}x{h}")
 
     def _build_alerts_tab(self):
         # Header
@@ -1753,6 +1980,13 @@ class TrueMonitorApp:
                         disk_col = COLORS["critical"] if disks[i]["has_error"] else COLORS["good"]
                         rect.config(bg=disk_col)
 
+                # Update stored topology for drive map button
+                topo = pool.get("topology", {})
+                if topo:
+                    card["topology"] = topo
+                    card["map_btn"].config(
+                        command=lambda n=name, t=topo: self._show_drive_map(n, t))
+
         # Check alert conditions
         self._check_alerts(s)
 
@@ -1812,7 +2046,19 @@ class TrueMonitorApp:
                      {"name": "sdb", "has_error": False},
                      {"name": "sdc", "has_error": False},
                      {"name": "sdd", "has_error": False},
-                 ]},
+                 ],
+                 "topology": {
+                     "data": [
+                         {"type": "MIRROR", "status": "ONLINE", "disks": [
+                             {"name": "sda", "status": "ONLINE", "errors": 0},
+                             {"name": "sdb", "status": "ONLINE", "errors": 0},
+                         ]},
+                         {"type": "MIRROR", "status": "ONLINE", "disks": [
+                             {"name": "sdc", "status": "ONLINE", "errors": 0},
+                             {"name": "sdd", "status": "ONLINE", "errors": 0},
+                         ]},
+                     ],
+                 }},
                 {"name": "fast-storage",
                  "total": 2 * 1024**4,         # 2 TB
                  "used": int(1.6 * 1024**4),   # 1.6 TB
@@ -1821,7 +2067,20 @@ class TrueMonitorApp:
                  "disks": [
                      {"name": "nvme0n1", "has_error": False},
                      {"name": "nvme1n1", "has_error": True},
-                 ]},
+                 ],
+                 "topology": {
+                     "data": [
+                         {"type": "MIRROR", "status": "ONLINE", "disks": [
+                             {"name": "nvme0n1", "status": "ONLINE", "errors": 0},
+                             {"name": "nvme1n1", "status": "DEGRADED", "errors": 3},
+                         ]},
+                     ],
+                     "cache": [
+                         {"type": "STRIPE", "status": "ONLINE", "disks": [
+                             {"name": "nvme2n1", "status": "ONLINE", "errors": 0},
+                         ]},
+                     ],
+                 }},
                 {"name": "backup",
                  "total": 16 * 1024**4,        # 16 TB
                  "used": int(14.5 * 1024**4),  # 14.5 TB
@@ -1834,7 +2093,24 @@ class TrueMonitorApp:
                      {"name": "sdh", "has_error": False},
                      {"name": "sdi", "has_error": False},
                      {"name": "sdj", "has_error": False},
-                 ]},
+                 ],
+                 "topology": {
+                     "data": [
+                         {"type": "RAIDZ2", "status": "ONLINE", "disks": [
+                             {"name": "sde", "status": "ONLINE", "errors": 0},
+                             {"name": "sdf", "status": "ONLINE", "errors": 0},
+                             {"name": "sdg", "status": "ONLINE", "errors": 0},
+                             {"name": "sdh", "status": "ONLINE", "errors": 0},
+                             {"name": "sdi", "status": "ONLINE", "errors": 0},
+                             {"name": "sdj", "status": "ONLINE", "errors": 0},
+                         ]},
+                     ],
+                     "spare": [
+                         {"type": "DISK", "status": "ONLINE", "disks": [
+                             {"name": "sdk", "status": "ONLINE", "errors": 0},
+                         ]},
+                     ],
+                 }},
             ]
 
             stats = {
