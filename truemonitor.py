@@ -15,7 +15,10 @@ import getpass
 from datetime import datetime, timedelta, timezone
 from collections import deque
 
+import tkinter.font as tkfont
 from cryptography.fernet import Fernet, InvalidToken
+
+FONT_SCALES = {"Small": 0.85, "Medium": 1.0, "Large": 1.15}
 
 try:
     import requests
@@ -501,6 +504,8 @@ class TrueMonitorApp:
         self._seen_truenas_alerts = set()
         self.pool_cards = {}
         self._pool_count = 0
+        self._font_scale = FONT_SCALES.get(
+            self.config.get("font_size", "Medium"), 1.0)
 
         self._setup_styles()
         self._build_ui()
@@ -545,6 +550,10 @@ class TrueMonitorApp:
         with open(CONFIG_FILE, "w") as f:
             json.dump(save_data, f, indent=2)
 
+    def _sf(self, base_size):
+        """Return a font size scaled by the current font scale factor."""
+        return max(6, int(round(base_size * self._font_scale)))
+
     # --- ttk styles ---
     def _setup_styles(self):
         s = ttk.Style()
@@ -556,7 +565,7 @@ class TrueMonitorApp:
             background=COLORS["card"],
             foreground=COLORS["text"],
             padding=[18, 8],
-            font=("Helvetica", 11),
+            font=("Helvetica", self._sf(11)),
         )
         s.map(
             "TNotebook.Tab",
@@ -566,23 +575,23 @@ class TrueMonitorApp:
 
         for name, opts in {
             "Card.TLabel": {"bg": COLORS["card"], "fg": COLORS["text"],
-                            "font": ("Helvetica", 11)},
+                            "font": ("Helvetica", self._sf(11))},
             "CardTitle.TLabel": {"bg": COLORS["card"], "fg": COLORS["accent"],
-                                 "font": ("Helvetica", 12, "bold")},
+                                 "font": ("Helvetica", self._sf(12), "bold")},
             "CardValue.TLabel": {"bg": COLORS["card"], "fg": COLORS["text"],
-                                  "font": ("Helvetica", 28, "bold")},
+                                  "font": ("Helvetica", self._sf(28), "bold")},
             "CardSub.TLabel": {"bg": COLORS["card"], "fg": COLORS["text_dim"],
-                                "font": ("Helvetica", 10)},
+                                "font": ("Helvetica", self._sf(10))},
             "Status.TLabel": {"bg": COLORS["bg"], "fg": COLORS["text_dim"],
-                               "font": ("Helvetica", 10)},
+                               "font": ("Helvetica", self._sf(10))},
             "StatusOK.TLabel": {"bg": COLORS["bg"], "fg": COLORS["good"],
-                                 "font": ("Helvetica", 10)},
+                                 "font": ("Helvetica", self._sf(10))},
             "StatusErr.TLabel": {"bg": COLORS["bg"], "fg": COLORS["critical"],
-                                  "font": ("Helvetica", 10)},
+                                  "font": ("Helvetica", self._sf(10))},
             "Settings.TLabel": {"bg": COLORS["bg"], "fg": COLORS["text"],
-                                 "font": ("Helvetica", 11)},
+                                 "font": ("Helvetica", self._sf(11))},
             "SettingsH.TLabel": {"bg": COLORS["bg"], "fg": COLORS["accent"],
-                                  "font": ("Helvetica", 14, "bold")},
+                                  "font": ("Helvetica", self._sf(14), "bold")},
         }.items():
             s.configure(name, background=opts["bg"], foreground=opts["fg"],
                         font=opts["font"])
@@ -614,7 +623,7 @@ class TrueMonitorApp:
         self.root.option_add("*TCombobox*Listbox.foreground", COLORS["text"])
         self.root.option_add("*TCombobox*Listbox.selectBackground", COLORS["card_border"])
         self.root.option_add("*TCombobox*Listbox.selectForeground", COLORS["text"])
-        self.root.option_add("*TCombobox*Listbox.font", ("Helvetica", 11))
+        self.root.option_add("*TCombobox*Listbox.font", ("Helvetica", self._sf(11)))
 
         for color_name, color_val in (("green", COLORS["good"]),
                                        ("yellow", COLORS["warning"]),
@@ -629,15 +638,16 @@ class TrueMonitorApp:
 
     # --- UI construction ---
     def _build_ui(self):
-        main = tk.Frame(self.root, bg=COLORS["bg"])
-        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self._main_frame = tk.Frame(self.root, bg=COLORS["bg"])
+        self._main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main = self._main_frame
 
         # header
         hdr = tk.Frame(main, bg=COLORS["bg"])
         hdr.pack(fill=tk.X, pady=(0, 8))
         tk.Label(
             hdr, text="TrueMonitor", bg=COLORS["bg"], fg=COLORS["accent"],
-            font=("Helvetica", 20, "bold"),
+            font=("Helvetica", self._sf(20), "bold"),
         ).pack(side=tk.LEFT)
         self.status_lbl = ttk.Label(hdr, text="Disconnected",
                                     style="Status.TLabel")
@@ -660,7 +670,7 @@ class TrueMonitorApp:
 
         # footer
         self.footer = tk.Label(main, text="", bg=COLORS["bg"],
-                               fg=COLORS["text_dim"], font=("Helvetica", 9))
+                               fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)))
         self.footer.pack(fill=tk.X, pady=(6, 0))
 
     def _make_card(self, parent, title, row, col):
@@ -699,7 +709,7 @@ class TrueMonitorApp:
         info_f.pack(fill=tk.X, padx=8, pady=(8, 0))
         self.info_lbl = tk.Label(
             info_f, text="Connect to TrueNAS to begin monitoring",
-            bg=COLORS["card"], fg=COLORS["text"], font=("Helvetica", 10),
+            bg=COLORS["card"], fg=COLORS["text"], font=("Helvetica", self._sf(10)),
         )
         self.info_lbl.pack(anchor="w")
 
@@ -734,28 +744,28 @@ class TrueMonitorApp:
         leg = tk.Frame(hdr, bg=COLORS["card"])
         leg.pack(side=tk.RIGHT)
         tk.Label(leg, text="\u25cf", fg=COLORS["good"], bg=COLORS["card"],
-                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+                 font=("Helvetica", self._sf(10))).pack(side=tk.LEFT)
         tk.Label(leg, text="In ", fg=COLORS["text_dim"], bg=COLORS["card"],
-                 font=("Helvetica", 9)).pack(side=tk.LEFT)
+                 font=("Helvetica", self._sf(9))).pack(side=tk.LEFT)
         tk.Label(leg, text="\u25cf", fg=COLORS["accent"], bg=COLORS["card"],
-                 font=("Helvetica", 10)).pack(side=tk.LEFT)
+                 font=("Helvetica", self._sf(10))).pack(side=tk.LEFT)
         tk.Label(leg, text="Out", fg=COLORS["text_dim"], bg=COLORS["card"],
-                 font=("Helvetica", 9)).pack(side=tk.LEFT)
+                 font=("Helvetica", self._sf(9))).pack(side=tk.LEFT)
 
         # Current speed labels
         speed_f = tk.Frame(f, bg=COLORS["card"])
         speed_f.pack(fill=tk.X, pady=(6, 4))
         self.net_rx_lbl = tk.Label(
             speed_f, text="\u2193 --", bg=COLORS["card"], fg=COLORS["good"],
-            font=("Helvetica", 14, "bold"))
+            font=("Helvetica", self._sf(14), "bold"))
         self.net_rx_lbl.pack(side=tk.LEFT, padx=(0, 16))
         self.net_tx_lbl = tk.Label(
             speed_f, text="\u2191 --", bg=COLORS["card"], fg=COLORS["accent"],
-            font=("Helvetica", 14, "bold"))
+            font=("Helvetica", self._sf(14), "bold"))
         self.net_tx_lbl.pack(side=tk.LEFT)
         self.net_iface_lbl = tk.Label(
             speed_f, text="", bg=COLORS["card"], fg=COLORS["text_dim"],
-            font=("Helvetica", 9))
+            font=("Helvetica", self._sf(9)))
         self.net_iface_lbl.pack(side=tk.RIGHT)
 
         # Canvas for the graph
@@ -766,7 +776,7 @@ class TrueMonitorApp:
         # Y-axis scale label
         self.net_scale_lbl = tk.Label(
             f, text="", bg=COLORS["card"], fg=COLORS["text_dim"],
-            font=("Helvetica", 8))
+            font=("Helvetica", self._sf(8)))
         self.net_scale_lbl.pack(anchor="e")
 
     def _draw_net_graph(self):
@@ -833,15 +843,15 @@ class TrueMonitorApp:
         temp_f.pack(fill=tk.X, pady=(6, 4))
         self.temp_val_lbl = tk.Label(
             temp_f, text="--", bg=COLORS["card"], fg=COLORS["text"],
-            font=("Helvetica", 22, "bold"))
+            font=("Helvetica", self._sf(28), "bold"))
         self.temp_val_lbl.pack(side=tk.LEFT)
         self.temp_status_lbl = tk.Label(
             temp_f, text="", bg=COLORS["card"], fg=COLORS["text_dim"],
-            font=("Helvetica", 11))
+            font=("Helvetica", self._sf(11)))
         self.temp_status_lbl.pack(side=tk.LEFT, padx=(12, 0))
         self.temp_range_lbl = tk.Label(
             temp_f, text="", bg=COLORS["card"], fg=COLORS["text_dim"],
-            font=("Helvetica", 9))
+            font=("Helvetica", self._sf(9)))
         self.temp_range_lbl.pack(side=tk.RIGHT)
 
         # Canvas for the graph
@@ -884,10 +894,10 @@ class TrueMonitorApp:
         # Threshold lines
         c.create_line(0, y_hot, w, y_hot, fill=COLORS["critical"], dash=(3, 3))
         c.create_text(w - 4, y_hot - 8, text="80\u00b0C", fill=COLORS["critical"],
-                      font=("Helvetica", 7), anchor="e")
+                      font=("Helvetica", self._sf(7)), anchor="e")
         c.create_line(0, y_warm, w, y_warm, fill=COLORS["warning"], dash=(3, 3))
         c.create_text(w - 4, y_warm - 8, text="60\u00b0C", fill=COLORS["warning"],
-                      font=("Helvetica", 7), anchor="e")
+                      font=("Helvetica", self._sf(7)), anchor="e")
 
         # Draw the temperature line
         points = []
@@ -963,7 +973,7 @@ class TrueMonitorApp:
             disk_frame.pack(anchor="w", pady=(8, 0))
             disk_label = tk.Label(
                 disk_frame, text="Disks:", bg=COLORS["card"],
-                fg=COLORS["text_dim"], font=("Helvetica", 9),
+                fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)),
             )
             disk_label.pack(side=tk.LEFT, padx=(0, 6))
 
@@ -1007,14 +1017,14 @@ class TrueMonitorApp:
             side=tk.LEFT)
         self.alert_count_lbl = tk.Label(
             hdr, text="0 alerts", bg=COLORS["bg"], fg=COLORS["text_dim"],
-            font=("Helvetica", 10))
+            font=("Helvetica", self._sf(10)))
         self.alert_count_lbl.pack(side=tk.LEFT, padx=(12, 0))
 
         clear_btn = tk.Button(
             hdr, text="Clear All", bg=COLORS["card"], fg=COLORS["text"],
             activebackground=COLORS["card_border"],
             activeforeground=COLORS["text"],
-            font=("Helvetica", 10), relief="flat", padx=14, pady=4,
+            font=("Helvetica", self._sf(10)), relief="flat", padx=14, pady=4,
             command=self._clear_alerts)
         clear_btn.pack(side=tk.RIGHT)
 
@@ -1027,7 +1037,7 @@ class TrueMonitorApp:
 
         self.alert_listbox = tk.Text(
             list_frame, bg=COLORS["card"], fg=COLORS["text"],
-            font=("Courier", 10), relief="flat", bd=8,
+            font=("Courier", self._sf(10)), relief="flat", bd=8,
             wrap=tk.WORD, state=tk.DISABLED,
             yscrollcommand=scrollbar.set,
             highlightbackground=COLORS["card_border"], highlightthickness=1)
@@ -1305,7 +1315,7 @@ class TrueMonitorApp:
 
         entry_kw = dict(
             bg=COLORS["input_bg"], fg=COLORS["text"],
-            insertbackground=COLORS["text"], font=("Helvetica", 11),
+            insertbackground=COLORS["text"], font=("Helvetica", self._sf(11)),
             relief="flat", bd=5,
         )
 
@@ -1328,7 +1338,7 @@ class TrueMonitorApp:
         r = 3
         tk.Label(c, text="--- or use credentials ---", bg=COLORS["bg"],
                  fg=COLORS["text_dim"],
-                 font=("Helvetica", 10)).grid(row=r, column=0,
+                 font=("Helvetica", self._sf(10))).grid(row=r, column=0,
                                               columnspan=2, pady=14)
 
         r = 4
@@ -1358,7 +1368,7 @@ class TrueMonitorApp:
         r = 7
         tk.Label(c, text="--- alert thresholds ---", bg=COLORS["bg"],
                  fg=COLORS["text_dim"],
-                 font=("Helvetica", 10)).grid(row=r, column=0,
+                 font=("Helvetica", self._sf(10))).grid(row=r, column=0,
                                               columnspan=2, pady=14)
 
         r = 8
@@ -1369,21 +1379,42 @@ class TrueMonitorApp:
         self.temp_combo = ttk.Combobox(
             c, textvariable=self.temp_threshold_var, values=temp_values,
             width=6, state="readonly", style="Settings.TCombobox",
-            font=("Helvetica", 11),
+            font=("Helvetica", self._sf(11)),
         )
         self.temp_combo.grid(row=r, column=1, sticky="w", pady=6, padx=(10, 0))
         self.temp_combo.bind("<<ComboboxSelected>>", self._on_temp_threshold_change)
+
+        r = 9
+        tk.Label(c, text="--- display ---", bg=COLORS["bg"],
+                 fg=COLORS["text_dim"],
+                 font=("Helvetica", self._sf(10))).grid(row=r, column=0,
+                                              columnspan=2, pady=14)
+
+        r = 10
+        self.font_size_var = tk.StringVar(
+            value=self.config.get("font_size", "Medium"))
+        ttk.Label(c, text="Font Size:",
+                  style="Settings.TLabel").grid(row=r, column=0,
+                                                sticky="w", pady=6)
+        self.font_combo = ttk.Combobox(
+            c, textvariable=self.font_size_var,
+            values=["Small", "Medium", "Large"],
+            width=8, state="readonly", style="Settings.TCombobox",
+            font=("Helvetica", self._sf(11)),
+        )
+        self.font_combo.grid(row=r, column=1, sticky="w", pady=6, padx=(10, 0))
+        self.font_combo.bind("<<ComboboxSelected>>", self._on_font_size_change)
 
         c.columnconfigure(1, weight=1)
 
         # buttons
         bf = tk.Frame(c, bg=COLORS["bg"])
-        bf.grid(row=9, column=0, columnspan=2, pady=26, sticky="w")
+        bf.grid(row=11, column=0, columnspan=2, pady=26, sticky="w")
 
         self.conn_btn = tk.Button(
             bf, text="Save & Connect", bg=COLORS["button"],
             fg=COLORS["text"], activebackground=COLORS["button_hover"],
-            activeforeground=COLORS["text"], font=("Helvetica", 11, "bold"),
+            activeforeground=COLORS["text"], font=("Helvetica", self._sf(11), "bold"),
             relief="flat", padx=22, pady=8, command=self._on_save,
         )
         self.conn_btn.pack(side=tk.LEFT, padx=(0, 14))
@@ -1391,7 +1422,7 @@ class TrueMonitorApp:
         self.disc_btn = tk.Button(
             bf, text="Disconnect", bg=COLORS["critical"], fg=COLORS["text"],
             activebackground="#d32f2f", activeforeground=COLORS["text"],
-            font=("Helvetica", 11), relief="flat", padx=22, pady=8,
+            font=("Helvetica", self._sf(11)), relief="flat", padx=22, pady=8,
             command=self._disconnect, state=tk.DISABLED,
         )
         self.disc_btn.pack(side=tk.LEFT)
@@ -1399,7 +1430,7 @@ class TrueMonitorApp:
         self.demo_btn = tk.Button(
             bf, text="Demo Mode", bg=COLORS["warning"], fg="#1a1a2e",
             activebackground="#ffb74d", activeforeground="#1a1a2e",
-            font=("Helvetica", 11, "bold"), relief="flat", padx=22, pady=8,
+            font=("Helvetica", self._sf(11), "bold"), relief="flat", padx=22, pady=8,
             command=self._toggle_demo,
         )
         self.demo_btn.pack(side=tk.LEFT, padx=(14, 0))
@@ -1411,6 +1442,42 @@ class TrueMonitorApp:
         self.pass_var.set(self.config.get("password", ""))
         self.interval_var.set(str(self.config.get("interval", 5)))
         self.temp_threshold_var.set(str(self.config.get("temp_threshold", 82)))
+        self.font_size_var.set(self.config.get("font_size", "Medium"))
+
+    def _on_font_size_change(self, event=None):
+        """Save the font size and rebuild the UI."""
+        size_name = self.font_size_var.get()
+        self.config["font_size"] = size_name
+        self._save_config()
+        self._font_scale = FONT_SCALES.get(size_name, 1.0)
+
+        # Preserve state
+        was_polling = self.polling
+        was_demo = self.demo_mode
+        conn_state = self.disc_btn.cget("state") if hasattr(self, 'disc_btn') else tk.DISABLED
+
+        # Rebuild UI
+        self._main_frame.destroy()
+        self.pool_cards = {}
+        self._pool_count = 0
+        self._setup_styles()
+        self._build_ui()
+
+        # Restore settings fields
+        self._populate_settings()
+
+        # Restore connection state
+        if was_demo:
+            self.demo_btn.config(text="Stop Demo", bg=COLORS["critical"])
+            self.conn_btn.config(state=tk.DISABLED)
+            self.status_lbl.config(text="Demo Mode", style="StatusOK.TLabel")
+        elif self.client and was_polling:
+            self.conn_btn.config(text="Reconnect")
+            self.disc_btn.config(state=tk.NORMAL)
+            self.status_lbl.config(text="Connected", style="StatusOK.TLabel")
+
+        # Switch to settings tab
+        self.notebook.select(2)
 
     def _on_temp_threshold_change(self, event=None):
         """Save the temperature threshold immediately when changed."""
@@ -1453,6 +1520,7 @@ class TrueMonitorApp:
             "username": user, "password": pw,
             "interval": iv_val,
             "temp_threshold": temp_thresh,
+            "font_size": self.font_size_var.get(),
         }
         self._save_config()
         self._connect()
