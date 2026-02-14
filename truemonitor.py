@@ -19,6 +19,11 @@ import tkinter.font as tkfont
 from cryptography.fernet import Fernet, InvalidToken
 
 FONT_SCALES = {"Small": 0.85, "Medium": 1.0, "Large": 1.15}
+WINDOW_SIZES = {
+    "Small":  {"width": 860, "height": 620, "min_w": 750, "min_h": 540},
+    "Medium": {"width": 1050, "height": 750, "min_w": 900, "min_h": 650},
+    "Large":  {"width": 1280, "height": 900, "min_w": 1100, "min_h": 780},
+}
 
 try:
     import requests
@@ -29,7 +34,7 @@ except ImportError:
     print("  pip install requests")
     raise SystemExit(1)
 
-APP_VERSION = "0.1"
+APP_VERSION = "0.1.0.1"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -532,8 +537,6 @@ class TrueMonitorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TrueMonitor")
-        self.root.geometry("1050x750")
-        self.root.minsize(900, 650)
         self.root.configure(bg=COLORS["bg"])
 
         self.client = None
@@ -541,6 +544,7 @@ class TrueMonitorApp:
         self.demo_mode = False
         self.poll_thread = None
         self.config = self._load_config()
+        self._apply_window_size()
         self.net_history_rx = []
         self.net_history_tx = []
         self.temp_history = []
@@ -601,6 +605,17 @@ class TrueMonitorApp:
     def _sf(self, base_size):
         """Return a font size scaled by the current font scale factor."""
         return max(6, int(round(base_size * self._font_scale)))
+
+    def _apply_window_size(self):
+        """Set window geometry based on the current font_size setting."""
+        size_name = self.config.get("font_size", "Medium")
+        ws = WINDOW_SIZES.get(size_name, WINDOW_SIZES["Medium"])
+        self._win_w = ws["width"]
+        self._win_h = ws["height"]
+        self._win_min_w = ws["min_w"]
+        self._win_min_h = ws["min_h"]
+        self.root.geometry(f"{self._win_w}x{self._win_h}")
+        self.root.minsize(self._win_min_w, self._win_min_h)
 
     # --- ttk styles ---
     def _setup_styles(self):
@@ -1064,7 +1079,7 @@ class TrueMonitorApp:
 
         # Resize window to fit pool rows
         pool_rows_total = math.ceil(num_pools / 2)
-        new_height = 750 + pool_rows_total * 200
+        new_height = self._win_h + pool_rows_total * 200
         cur_geo = self.root.geometry()
         # Parse current width from geometry string
         try:
@@ -1072,7 +1087,7 @@ class TrueMonitorApp:
         except (ValueError, IndexError):
             width = 1050
         self.root.geometry(f"{width}x{new_height}")
-        self.root.minsize(900, 650 + pool_rows_total * 180)
+        self.root.minsize(self._win_min_w, self._win_min_h + pool_rows_total * 180)
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -1620,7 +1635,7 @@ class TrueMonitorApp:
         r = 10
         self.font_size_var = tk.StringVar(
             value=self.config.get("font_size", "Medium"))
-        ttk.Label(c, text="Font Size:",
+        ttk.Label(c, text="Display Size:",
                   style="Settings.TLabel").grid(row=r, column=0,
                                                 sticky="w", pady=6)
         self.font_combo = ttk.Combobox(
@@ -1683,7 +1698,8 @@ class TrueMonitorApp:
         was_demo = self.demo_mode
         conn_state = self.disc_btn.cget("state") if hasattr(self, 'disc_btn') else tk.DISABLED
 
-        # Rebuild UI
+        # Apply new window size and rebuild UI
+        self._apply_window_size()
         self._main_frame.destroy()
         self.pool_cards = {}
         self._pool_count = 0
@@ -1823,8 +1839,8 @@ class TrueMonitorApp:
         self.pool_cards = {}
         self._pool_count = 0
         # Reset window size back to default
-        self.root.geometry("1050x750")
-        self.root.minsize(900, 650)
+        self.root.geometry(f"{self._win_w}x{self._win_h}")
+        self.root.minsize(self._win_min_w, self._win_min_h)
         self.info_lbl.config(text="Connect to TrueNAS to begin monitoring")
         self.footer.config(text="")
 
