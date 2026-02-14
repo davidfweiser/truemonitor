@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives import hashes
 
 FONT_SCALES = {"Small": 0.85, "Medium": 1.0, "Large": 1.15}
 
-APP_VERSION = "0.1"
+APP_VERSION = "0.2"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonclient")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")

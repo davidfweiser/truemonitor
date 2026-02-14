@@ -1,4 +1,4 @@
-# TrueMonitor v0.1
+# TrueMonitor v0.2
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkinter, TrueMonitor provides a dark-themed GUI that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
