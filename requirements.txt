@@ -1,0 +1,5 @@
+# truemonitor.py  — TrueNAS monitoring dashboard
+requests>=2.28.0
+
+# truemonitor.py + truemonclient.py — credential/broadcast encryption (Fernet + PBKDF2HMAC)
+cryptography>=3.4
