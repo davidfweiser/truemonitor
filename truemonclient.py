@@ -159,42 +159,60 @@ class MonitorClient:
 
     def _recv_loop(self):
         retry_delay = 5
+        stats_count = 0
         while self._running:
             self._sock = None
             try:
+                debug(f"MonitorClient: connecting to {self.host}:{self.port}")
                 self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self._sock.settimeout(10.0)
                 self._sock.connect((self.host, self.port))
                 self._sock.settimeout(60.0)
+                debug(f"MonitorClient: connected to {self.host}:{self.port}")
                 self.on_connected()
                 fernet = self._get_fernet()
+                stats_count = 0
                 while self._running:
                     header = self._recvn(4)
                     if header is None:
+                        debug("MonitorClient: connection closed by server")
                         break
                     length = struct.unpack(">I", header)[0]
                     if length == 0 or length > 10 * 1024 * 1024:
+                        debug(f"MonitorClient: invalid frame length {length}, disconnecting")
                         break
                     encrypted = self._recvn(length)
                     if encrypted is None:
+                        debug("MonitorClient: failed to read payload, disconnecting")
                         break
                     try:
                         payload = fernet.decrypt(encrypted)
                         stats = json.loads(payload.decode())
+                        stats_count += 1
+                        if stats_count <= 3 or stats_count % 60 == 0:
+                            debug(f"MonitorClient: received stats #{stats_count} "
+                                  f"(cpu={stats.get('cpu_percent')}% "
+                                  f"mem={stats.get('memory_percent')}% "
+                                  f"temp={stats.get('cpu_temp')}°C)")
                         self.on_stats(stats)
                     except InvalidToken:
+                        debug("MonitorClient: decryption failed — wrong shared key")
                         self.on_error("Decryption failed — check shared key")
                         break
                     except Exception as e:
+                        debug(f"MonitorClient: data error: {e}")
                         self.on_error(f"Data error: {e}")
                         break
             except ConnectionRefusedError:
+                debug(f"MonitorClient: connection refused at {self.host}:{self.port}")
                 if self._running:
                     self.on_error(f"Connection refused — is TrueMonitor running on {self.host}:{self.port}?")
             except socket.timeout:
+                debug(f"MonitorClient: connection timed out to {self.host}:{self.port}")
                 if self._running:
                     self.on_error(f"Connection timed out to {self.host}:{self.port}")
             except Exception as e:
+                debug(f"MonitorClient: unexpected error: {e}")
                 if self._running:
                     self.on_error(str(e))
             finally:
@@ -250,8 +268,8 @@ class TrueMonClientApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TrueMonClient")
-        self.root.geometry("1050x750")
-        self.root.minsize(900, 650)
+        self.root.geometry("860x640")
+        self.root.minsize(760, 560)
         self.root.configure(bg=COLORS["bg"])
 
         self.monitor_client = None
@@ -740,14 +758,14 @@ class TrueMonClientApp:
 
         import math
         pool_rows_total = math.ceil(num_pools / 2)
-        new_height = 750 + pool_rows_total * 200
+        new_height = 640 + pool_rows_total * 200
         cur_geo = self.root.geometry()
         try:
             width = int(cur_geo.split("x")[0])
         except (ValueError, IndexError):
             width = 1050
         self.root.geometry(f"{width}x{new_height}")
-        self.root.minsize(900, 650 + pool_rows_total * 180)
+        self.root.minsize(760, 560 + pool_rows_total * 180)
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -1362,8 +1380,8 @@ class TrueMonClientApp:
             card["frame"].destroy()
         self.pool_cards = {}
         self._pool_count = 0
-        self.root.geometry("1050x750")
-        self.root.minsize(900, 650)
+        self.root.geometry("860x640")
+        self.root.minsize(760, 560)
         self.info_lbl.config(text="Connect to TrueMonitor to begin monitoring")
         self.footer.config(text="")
 

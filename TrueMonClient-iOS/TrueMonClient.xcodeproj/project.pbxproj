@@ -7,27 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10001 /* TrueMonClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001; };
-		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002; };
-		A10003 /* ServerStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003; };
-		A10004 /* AlertItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004; };
-		A10005 /* FernetDecryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005; };
-		A10006 /* KeyDerivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006; };
-		A10007 /* MonitorConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
-		A10008 /* MonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
-		A10009 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
-		A10010 /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010; };
-		A10011 /* CPUCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
-		A10012 /* MemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
-		A10013 /* NetworkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013; };
-		A10014 /* TemperatureCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014; };
-		A10015 /* PoolCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015; };
-		A10016 /* DriveMapSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016; };
-		A10017 /* AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017; };
-		A10018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018; };
-		A10019 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
-		A10020 /* FormatBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
-		A10021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10021; };
+		A10001 /* TrueMonClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* TrueMonClientApp.swift */; };
+		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002 /* ContentView.swift */; };
+		A10003 /* ServerStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003 /* ServerStats.swift */; };
+		A10004 /* AlertItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004 /* AlertItem.swift */; };
+		A10005 /* FernetDecryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005 /* FernetDecryptor.swift */; };
+		A10006 /* KeyDerivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006 /* KeyDerivation.swift */; };
+		A10007 /* MonitorConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* MonitorConnection.swift */; };
+		A10008 /* MonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008 /* MonitorService.swift */; };
+		A10009 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009 /* NotificationService.swift */; };
+		A10010 /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010 /* MonitorView.swift */; };
+		A10011 /* CPUCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011 /* CPUCard.swift */; };
+		A10012 /* MemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* MemoryCard.swift */; };
+		A10013 /* NetworkCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013 /* NetworkCard.swift */; };
+		A10014 /* TemperatureCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* TemperatureCard.swift */; };
+		A10015 /* PoolCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* PoolCard.swift */; };
+		A10016 /* DriveMapSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016 /* DriveMapSheet.swift */; };
+		A10017 /* AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017 /* AlertsView.swift */; };
+		A10018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018 /* SettingsView.swift */; };
+		A10019 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019 /* AppTheme.swift */; };
+		A10020 /* FormatBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020 /* FormatBytes.swift */; };
+		A10021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10021 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -395,6 +395,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R27KU7BQMW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TrueMonClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TrueMonClient;
@@ -423,6 +424,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R27KU7BQMW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TrueMonClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TrueMonClient;
@@ -466,7 +468,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = E10000 /* Project object */;
 }

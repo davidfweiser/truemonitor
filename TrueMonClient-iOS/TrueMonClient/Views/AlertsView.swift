@@ -34,15 +34,19 @@ struct AlertsView: View {
                 List {
                     ForEach(service.alerts) { alert in
                         alertRow(alert)
-                            .listRowBackground(AppTheme.card)
-                            .listRowSeparatorTint(AppTheme.cardBorder)
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(.ultraThinMaterial)
+                                    .padding(.vertical, 2)
+                            )
+                            .listRowSeparator(.hidden)
                     }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             }
         }
-        .background(AppTheme.bg)
+        .background(.clear)
     }
 
     @ViewBuilder

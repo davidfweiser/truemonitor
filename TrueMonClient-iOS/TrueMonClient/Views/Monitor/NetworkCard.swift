@@ -37,7 +37,7 @@ struct NetworkCard: View {
                             x: .value("Time", i),
                             y: .value("Bytes", val)
                         )
-                        .foregroundStyle(AppTheme.good)
+                        .foregroundStyle(by: .value("Series", "↓ RX"))
                         .interpolationMethod(.monotone)
                     }
                     ForEach(Array(txHistory.enumerated()), id: \.offset) { i, val in
@@ -45,10 +45,12 @@ struct NetworkCard: View {
                             x: .value("Time", i),
                             y: .value("Bytes", val)
                         )
-                        .foregroundStyle(AppTheme.accent)
+                        .foregroundStyle(by: .value("Series", "↑ TX"))
                         .interpolationMethod(.monotone)
                     }
                 }
+                .chartForegroundStyleScale(["↓ RX": AppTheme.good, "↑ TX": AppTheme.accent])
+                .chartLegend(.hidden)
                 .chartXAxis(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in

@@ -65,7 +65,9 @@ struct MonitorView: View {
             .padding(.horizontal)
             .padding(.bottom, 20)
         }
-        .background(AppTheme.bg)
+        .background {
+            AppTheme.backgroundGradient.ignoresSafeArea()
+        }
     }
 
     private var connectionHeader: some View {
@@ -117,25 +119,34 @@ struct MonitorView: View {
     }
 }
 
-/// Reusable dark card container matching the desktop design.
+/// Reusable glass card container with iOS 26 Liquid Glass effect.
 struct CardContainer<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.headline)
-                .foregroundColor(AppTheme.accent)
+                .font(.headline.bold())
+                .foregroundStyle(AppTheme.accent)
             content()
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.card)
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(AppTheme.cardBorder, lineWidth: 1)
-        )
+        .background {
+            if #available(iOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .glassEffect(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(AppTheme.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(AppTheme.cardBorder, lineWidth: 1)
+                    )
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }

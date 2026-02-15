@@ -645,8 +645,8 @@ class TrueMonitorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TrueMonitor")
-        self.root.geometry("1050x750")
-        self.root.minsize(900, 650)
+        self.root.geometry("860x640")
+        self.root.minsize(760, 560)
         self.root.configure(bg=COLORS["bg"])
 
         self.client = None
@@ -1179,7 +1179,7 @@ class TrueMonitorApp:
 
         # Resize window to fit pool rows
         pool_rows_total = math.ceil(num_pools / 2)
-        new_height = 750 + pool_rows_total * 200
+        new_height = 640 + pool_rows_total * 200
         cur_geo = self.root.geometry()
         # Parse current width from geometry string
         try:
@@ -1187,7 +1187,7 @@ class TrueMonitorApp:
         except (ValueError, IndexError):
             width = 1050
         self.root.geometry(f"{width}x{new_height}")
-        self.root.minsize(900, 650 + pool_rows_total * 180)
+        self.root.minsize(760, 560 + pool_rows_total * 180)
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -2031,8 +2031,8 @@ class TrueMonitorApp:
         self.pool_cards = {}
         self._pool_count = 0
         # Reset window size back to default
-        self.root.geometry("1050x750")
-        self.root.minsize(900, 650)
+        self.root.geometry("860x640")
+        self.root.minsize(760, 560)
         self.info_lbl.config(text="Connect to TrueNAS to begin monitoring")
         self.footer.config(text="")
 

@@ -14,6 +14,18 @@ enum AppTheme {
     static let inputBg    = Color(hex: 0x0f3460)
     static let button     = Color(hex: 0x533483)
     static let buttonHover = Color(hex: 0x6a42a0)
+
+    static var backgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(hex: 0x0d1020),
+                Color(hex: 0x1a1a3e),
+                Color(hex: 0x0a1628)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 extension Color {
