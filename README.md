@@ -1,8 +1,8 @@
-# TrueMonitor v0.2
+# TrueMonitor v0.3
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkinter, TrueMonitor provides a dark-themed GUI that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
-A companion app — **TrueMonClient** — can connect to TrueMonitor over the network and display the same live data remotely, without needing direct access to the TrueNAS API.
+Two companion apps — **TrueMonClient** (Python desktop) and **TrueMonClient iOS** (native iPhone app) — can connect to TrueMonitor over the network and display the same live data remotely, without needing direct access to the TrueNAS API.
 
 ---
 
@@ -12,6 +12,7 @@ A companion app — **TrueMonClient** — can connect to TrueMonitor over the ne
 |------|-------------|
 | `truemonitor.py` | Main dashboard — connects to TrueNAS API, displays metrics, broadcasts data to clients |
 | `truemonclient.py` | Remote client — receives and displays live data from a running TrueMonitor instance |
+| `TrueMonClient-iOS/` | Native iOS app — same monitoring dashboard for iPhone, built with SwiftUI |
 
 ---
 
@@ -186,6 +187,35 @@ TrueMonitor passwords and API keys are encrypted at rest using Fernet symmetric 
 
 ---
 
+## TrueMonClient iOS
+
+A native iPhone app that connects to TrueMonitor's broadcast server and displays the same live monitoring dashboard. Built with SwiftUI for iOS 16+ with full iOS 26 Liquid Glass design support.
+
+### Features
+
+- **Monitor tab** — CPU, Memory, Network, Temperature, and ZFS pool cards with live data
+- **Network chart** — Dual-color line graph (green = RX, cyan = TX) with 60-point history
+- **Temperature chart** — Line graph with color-coded warning/critical zone overlays
+- **Drive Map** — Vdev topology sheet per pool showing disk health
+- **Alerts tab** — Color-coded alert list (info/warning/critical) with timestamps
+- **Settings tab** — Server host/port/key, alert thresholds, connect/disconnect button
+- **iOS 26 Liquid Glass** — Glass cards, floating tab bar, deep gradient background
+- **Background monitoring** — BGProcessingTask for periodic checks when app is backgrounded
+- **Local notifications** — Push alerts when thresholds are exceeded
+- **Keychain storage** — Passphrase stored securely in the iOS Keychain
+
+### Requirements
+
+- iOS 16.0+
+- Xcode 16+
+- No third-party dependencies — all crypto via CommonCrypto + CryptoKit
+
+### Build
+
+Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target device, and build.
+
+---
+
 ## Architecture
 
 ### truemonitor.py
@@ -198,6 +228,14 @@ TrueMonitor passwords and API keys are encrypted at rest using Fernet symmetric 
 
 - **MonitorClient** - TCP client that connects to TrueMonitor's broadcast server, decrypts incoming packets, and feeds data to the UI. Auto-reconnects on disconnect.
 - **TrueMonClientApp** - Identical tkinter GUI to TrueMonitorApp, driven by received data instead of direct API polling
+
+### TrueMonClient iOS
+
+- **KeyDerivation** - PBKDF2-HMAC-SHA256 wrapper via CommonCrypto (100k iterations, constant salt)
+- **FernetDecryptor** - Fernet token decryption: base64url decode → HMAC-SHA256 verify → AES-128-CBC decrypt
+- **MonitorConnection** - NWConnection TCP client with 4-byte length-prefix framing and async callbacks
+- **MonitorService** - `@MainActor ObservableObject` managing connection lifecycle, reconnect, 60-point history buffers, alert evaluation, Keychain passphrase storage
+- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live graphs
 
 ---
 

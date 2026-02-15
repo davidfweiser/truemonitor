@@ -137,6 +137,27 @@ struct SettingsView: View {
             portString = String(service.serverPort)
             passphrase = service.loadPassphrase() ?? "truemonitor"
         }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    if service.connectionState == .connected {
+                        service.disconnect()
+                    } else {
+                        service.connect()
+                    }
+                } label: {
+                    if service.connectionState == .connecting {
+                        ProgressView().tint(AppTheme.accent)
+                    } else if service.connectionState == .connected {
+                        Label("Disconnect", systemImage: "xmark.circle.fill")
+                            .foregroundStyle(AppTheme.critical)
+                    } else {
+                        Label("Connect", systemImage: "play.circle.fill")
+                            .foregroundStyle(AppTheme.good)
+                    }
+                }
+            }
+        }
     }
 
     private var statusColor: Color {
