@@ -15,6 +15,7 @@ struct ContentView: View {
                     MonitorView()
                         .navigationTitle("TrueMonitor")
                         .navigationBarTitleDisplayMode(.large)
+                        .toolbarBackground(.hidden, for: .navigationBar)
                 }
                 .tag(0)
                 .tabItem {
@@ -25,6 +26,7 @@ struct ContentView: View {
                     AlertsView()
                         .navigationTitle("Alerts")
                         .navigationBarTitleDisplayMode(.large)
+                        .toolbarBackground(.hidden, for: .navigationBar)
                 }
                 .tag(1)
                 .tabItem {
@@ -36,6 +38,7 @@ struct ContentView: View {
                     SettingsView()
                         .navigationTitle("Settings")
                         .navigationBarTitleDisplayMode(.large)
+                        .toolbarBackground(.hidden, for: .navigationBar)
                 }
                 .tag(2)
                 .tabItem {
@@ -50,6 +53,8 @@ struct ContentView: View {
             if url.host == "settings" { selectedTab = 2 }
             else if url.host == "alerts" { selectedTab = 1 }
             else if url.host == "monitor" { selectedTab = 0 }
+            else if url.host == "connect" { service.connect() }
+            else if url.host == "disconnect" { service.disconnect() }
         }
     }
 }

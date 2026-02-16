@@ -132,7 +132,9 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(.clear)
+        .background {
+            AppTheme.backgroundGradient.ignoresSafeArea()
+        }
         .onAppear {
             portString = String(service.serverPort)
             passphrase = service.loadPassphrase() ?? "truemonitor"

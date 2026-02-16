@@ -46,7 +46,9 @@ struct AlertsView: View {
                 .scrollContentBackground(.hidden)
             }
         }
-        .background(.clear)
+        .background {
+            AppTheme.backgroundGradient.ignoresSafeArea()
+        }
     }
 
     @ViewBuilder
