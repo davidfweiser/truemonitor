@@ -68,6 +68,7 @@ TrueMonClient is an identical monitoring UI that receives its data from a runnin
 - Identical Monitor, Alerts, and Settings tabs to TrueMonitor
 - Receives live data from TrueMonitor via an encrypted TCP connection
 - Auto-reconnects if the connection drops
+- TrueNAS system alerts forwarded from the server and displayed in the Alerts tab
 - Independent alert thresholds (evaluated locally on received data)
 - Demo Mode for testing without a TrueMonitor connection
 - Config stored separately in `~/.config/truemonclient/`
@@ -197,7 +198,7 @@ A native iPhone app that connects to TrueMonitor's broadcast server and displays
 - **Network chart** — Dual-color line graph (green = RX, cyan = TX) with 60-point history
 - **Temperature chart** — Line graph with color-coded warning/critical zone overlays
 - **Drive Map** — Vdev topology sheet per pool showing disk health
-- **Alerts tab** — Color-coded alert list (info/warning/critical) with timestamps
+- **Alerts tab** — Color-coded alert list (info/warning/critical) with timestamps, including TrueNAS system alerts forwarded from the server
 - **Settings tab** — Server host/port/key, alert thresholds, connect/disconnect button
 - **iOS 26 Liquid Glass** — Glass cards, floating tab bar, deep gradient background
 - **Background monitoring** — BGProcessingTask for periodic checks when app is backgrounded

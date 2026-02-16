@@ -110,6 +110,7 @@ final class MonitorService: ObservableObject {
         reconnectTask = nil
         connection.disconnect()
         connectionState = .disconnected
+        seenTrueNASAlerts.removeAll()
     }
 
     // MARK: - Stats Handling
@@ -174,8 +175,10 @@ final class MonitorService: ObservableObject {
 
     private var lastAlertTimes: [String: Date] = [:]
     private let alertCooldown: TimeInterval = 300 // 5 minutes
+    private var seenTrueNASAlerts: Set<String> = []
 
     private func evaluateAlerts(_ stats: ServerStats) {
+        processSystemAlerts(stats.systemAlerts ?? [])
         if let temp = stats.cpuTemp, temp > tempThreshold {
             addAlert(key: "temp", level: temp > 90 ? .critical : .warning,
                      message: "CPU temperature \(String(format: "%.0f", temp))°C exceeds threshold (\(String(format: "%.0f", tempThreshold))°C)")
@@ -187,6 +190,38 @@ final class MonitorService: ObservableObject {
         if memoryAlertEnabled, let mem = stats.memoryPercent, mem > 95 {
             addAlert(key: "memory", level: .warning,
                      message: "Memory usage at \(String(format: "%.1f", mem))%")
+        }
+    }
+
+    private func processSystemAlerts(_ systemAlerts: [SystemAlert]) {
+        let currentIDs = Set(systemAlerts.map(\.id))
+
+        for alert in systemAlerts {
+            guard !seenTrueNASAlerts.contains(alert.id) else { continue }
+            seenTrueNASAlerts.insert(alert.id)
+
+            let level: AlertLevel
+            switch alert.severity {
+            case "critical": level = .critical
+            case "warning":  level = .warning
+            default:         level = .info
+            }
+
+            let item = AlertItem(level: level, message: "[TrueNAS] \(alert.message)")
+            alerts.insert(item, at: 0)
+            saveAlerts()
+            notificationService.postAlert(item)
+        }
+
+        // Detect resolved/dismissed alerts
+        let resolved = seenTrueNASAlerts.subtracting(currentIDs)
+        if !resolved.isEmpty {
+            for alertID in resolved {
+                seenTrueNASAlerts.remove(alertID)
+            }
+            let item = AlertItem(level: .info, message: "[TrueNAS] Alert cleared")
+            alerts.insert(item, at: 0)
+            saveAlerts()
         }
     }
 

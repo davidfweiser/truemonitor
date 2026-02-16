@@ -285,6 +285,7 @@ class TrueMonClientApp:
         self._temp_alert_active = False
         self._cpu_alert_active = False
         self._mem_alert_active = False
+        self._seen_truenas_alerts = set()
         self.pool_cards = {}
         self._pool_count = 0
         self._font_scale = FONT_SCALES.get(
@@ -1105,6 +1106,40 @@ class TrueMonClientApp:
                     self._add_alert("resolved",
                                     f"Memory usage back to normal: {mem_pct}%")
 
+        # --- TrueNAS system alerts (forwarded from server) ---
+        self._process_system_alerts(stats.get("system_alerts", []))
+
+    def _process_system_alerts(self, alerts):
+        """Process TrueNAS system alerts received from the broadcast."""
+        try:
+            current_ids = set()
+            for alert in alerts:
+                alert_id = alert.get("id", "")
+                current_ids.add(alert_id)
+
+                if alert_id in self._seen_truenas_alerts:
+                    continue
+
+                self._seen_truenas_alerts.add(alert_id)
+
+                severity = alert.get("severity", "info")
+                msg = alert.get("message", "Unknown TrueNAS alert")
+
+                show_popup = severity in ("critical", "warning")
+                self._add_alert(
+                    severity,
+                    f"[TrueNAS] {msg}",
+                    popup=show_popup, sound=show_popup)
+
+            # Check for dismissed/resolved alerts
+            resolved = self._seen_truenas_alerts - current_ids
+            for alert_id in resolved:
+                self._seen_truenas_alerts.discard(alert_id)
+                self._add_alert("resolved", "[TrueNAS] Alert cleared")
+
+        except Exception as e:
+            debug(f" truenas alerts error: {e}")
+
     def _build_settings(self):
         c = tk.Frame(self.set_frame, bg=COLORS["bg"], padx=28, pady=20)
         c.pack(fill=tk.BOTH, expand=True)
@@ -1375,6 +1410,7 @@ class TrueMonClientApp:
         self._temp_alert_active = False
         self._cpu_alert_active = False
         self._mem_alert_active = False
+        self._seen_truenas_alerts.clear()
         self.notebook.tab(1, text="  Alerts  ")
         for card in self.pool_cards.values():
             card["frame"].destroy()

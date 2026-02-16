@@ -602,6 +602,34 @@ class TrueNASClient:
         except Exception as e:
             debug(f" pool error: {e}")
 
+        # System alerts from TrueNAS
+        stats["system_alerts"] = []
+        try:
+            alerts = self.get_alerts()
+            if isinstance(alerts, list):
+                for alert in alerts:
+                    if not isinstance(alert, dict):
+                        continue
+                    alert_id = alert.get("uuid") or alert.get("id") or str(alert)
+                    level = alert.get("level", "INFO").upper()
+                    if level in ("CRITICAL", "ERROR"):
+                        severity = "critical"
+                    elif level == "WARNING":
+                        severity = "warning"
+                    else:
+                        severity = "info"
+                    msg = alert.get("formatted", "") or alert.get("text", "")
+                    klass = alert.get("klass", "")
+                    if not msg:
+                        msg = klass or "Unknown TrueNAS alert"
+                    stats["system_alerts"].append({
+                        "id": alert_id,
+                        "severity": severity,
+                        "message": msg,
+                    })
+        except Exception as e:
+            debug(f" system alerts error: {e}")
+
         debug(f" final stats: {stats}")
         return stats
 
@@ -1582,43 +1610,23 @@ class TrueMonitorApp:
                         f"Memory usage back to normal: {mem_pct}%")
 
         # --- TrueNAS system alerts ---
-        self._fetch_truenas_alerts()
+        self._process_system_alerts(stats.get("system_alerts", []))
 
-    def _fetch_truenas_alerts(self):
-        """Pull alerts from TrueNAS alert/list API."""
-        if not self.client:
-            return
+    def _process_system_alerts(self, alerts):
+        """Process TrueNAS system alerts from stats dict."""
         try:
-            alerts = self.client.get_alerts()
-            if not isinstance(alerts, list):
-                return
-
-            # Track which alerts are currently active on TrueNAS
             current_ids = set()
             for alert in alerts:
-                if not isinstance(alert, dict):
-                    continue
-                alert_id = alert.get("uuid") or alert.get("id") or str(alert)
+                alert_id = alert.get("id", "")
                 current_ids.add(alert_id)
 
                 if alert_id in self._seen_truenas_alerts:
-                    continue  # already processed
+                    continue
 
                 self._seen_truenas_alerts.add(alert_id)
 
-                # Map TrueNAS severity to our severity
-                level = alert.get("level", "INFO").upper()
-                if level in ("CRITICAL", "ERROR"):
-                    severity = "critical"
-                elif level == "WARNING":
-                    severity = "warning"
-                else:
-                    severity = "info"
-
-                klass = alert.get("klass", "")
-                msg = alert.get("formatted", "") or alert.get("text", "")
-                if not msg:
-                    msg = klass or "Unknown TrueNAS alert"
+                severity = alert.get("severity", "info")
+                msg = alert.get("message", "Unknown TrueNAS alert")
 
                 show_popup = severity in ("critical", "warning")
                 self._add_alert(
