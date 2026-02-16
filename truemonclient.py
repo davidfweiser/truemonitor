@@ -268,8 +268,13 @@ class TrueMonClientApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TrueMonClient")
-        self.root.geometry("860x640")
-        self.root.minsize(760, 560)
+        import sys
+        if sys.platform == "win32":
+            self.root.geometry("760x560")
+            self.root.minsize(660, 480)
+        else:
+            self.root.geometry("860x640")
+            self.root.minsize(760, 560)
         self.root.configure(bg=COLORS["bg"])
 
         self.monitor_client = None
@@ -757,16 +762,19 @@ class TrueMonClientApp:
                 "topology": topo, "map_btn": map_btn,
             }
 
-        import math
+        import math, sys
         pool_rows_total = math.ceil(num_pools / 2)
-        new_height = 640 + pool_rows_total * 200
+        base_h = 560 if sys.platform == "win32" else 640
+        min_w = 660 if sys.platform == "win32" else 760
+        min_base_h = 480 if sys.platform == "win32" else 560
+        new_height = base_h + pool_rows_total * 200
         cur_geo = self.root.geometry()
         try:
             width = int(cur_geo.split("x")[0])
         except (ValueError, IndexError):
             width = 1050
         self.root.geometry(f"{width}x{new_height}")
-        self.root.minsize(760, 560 + pool_rows_total * 180)
+        self.root.minsize(min_w, min_base_h + pool_rows_total * 180)
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -1416,8 +1424,13 @@ class TrueMonClientApp:
             card["frame"].destroy()
         self.pool_cards = {}
         self._pool_count = 0
-        self.root.geometry("860x640")
-        self.root.minsize(760, 560)
+        import sys
+        if sys.platform == "win32":
+            self.root.geometry("760x560")
+            self.root.minsize(660, 480)
+        else:
+            self.root.geometry("860x640")
+            self.root.minsize(760, 560)
         self.info_lbl.config(text="Connect to TrueMonitor to begin monitoring")
         self.footer.config(text="")
 
