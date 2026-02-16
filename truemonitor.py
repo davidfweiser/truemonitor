@@ -2370,6 +2370,13 @@ def main():
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(DEBUG_LOG, "w") as f:
         f.write("")
+    import sys
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
     root = tk.Tk()
     TrueMonitorApp(root)
     root.mainloop()
