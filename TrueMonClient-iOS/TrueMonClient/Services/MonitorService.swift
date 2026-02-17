@@ -75,6 +75,14 @@ final class MonitorService: ObservableObject {
 
         loadAlerts()
 
+        // Auto-connect on launch if a host is already configured
+        if !serverHost.isEmpty {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self?.connect()
+            }
+        }
+
         connection.onStats = { [weak self] stats in
             Task { @MainActor [weak self] in
                 self?.handleStats(stats)
@@ -326,6 +334,12 @@ final class MonitorService: ObservableObject {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecSuccess, let data = result as? Data {
             return String(data: data, encoding: .utf8)
+        }
+        // Fallback: seed from UserDefaults (used during simulator setup)
+        if let seeded = UserDefaults.standard.string(forKey: "serverPassphrase") {
+            savePassphrase(seeded)
+            UserDefaults.standard.removeObject(forKey: "serverPassphrase")
+            return seeded
         }
         return nil
     }
