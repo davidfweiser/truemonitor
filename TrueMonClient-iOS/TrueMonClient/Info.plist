@@ -9,6 +9,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
+		<string>audio</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>TrueMonClient connects to your TrueMonitor server on your local network to receive system monitoring data.</string>

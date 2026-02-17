@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var service = MonitorService()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
 
     var body: some View {
@@ -49,6 +50,16 @@ struct ContentView: View {
         .tint(AppTheme.accent)
         .environmentObject(service)
         .preferredColorScheme(.dark)
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                service.reconnectIfNeeded()
+            case .background:
+                service.beginBackgroundExecution()
+            default:
+                break
+            }
+        }
         .onOpenURL { url in
             if url.host == "settings" { selectedTab = 2 }
             else if url.host == "alerts" { selectedTab = 1 }

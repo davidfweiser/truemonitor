@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Combine
 import Security
 
@@ -60,6 +61,7 @@ final class MonitorService: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var shouldAutoReconnect = false
     private let notificationService = NotificationService()
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
     // MARK: - Init
 
@@ -104,12 +106,45 @@ final class MonitorService: ObservableObject {
         connection.connect(host: serverHost, port: serverPort, passphrase: passphrase)
     }
 
+    /// Reconnect if the user had an active session (e.g. after returning from background).
+    func reconnectIfNeeded() {
+        endBackgroundTask()
+        guard shouldAutoReconnect else { return }
+        // Only reconnect if we're not already connected/connecting
+        switch connectionState {
+        case .connected, .connecting:
+            return
+        default:
+            reconnectTask?.cancel()
+            reconnectTask = nil
+            connect()
+        }
+    }
+
+    /// Request extended background execution time to keep the connection alive briefly.
+    func beginBackgroundExecution() {
+        guard shouldAutoReconnect else { return }
+        endBackgroundTask()
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "TrueMonitor") { [weak self] in
+            // iOS is about to kill our background time — clean up
+            self?.endBackgroundTask()
+        }
+    }
+
+    private func endBackgroundTask() {
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
+    }
+
     func disconnect() {
         shouldAutoReconnect = false
         reconnectTask?.cancel()
         reconnectTask = nil
+        endBackgroundTask()
         connection.disconnect()
         connectionState = .disconnected
+        BackgroundAudioService.shared.stop()
         seenTrueNASAlerts.removeAll()
     }
 
@@ -146,6 +181,7 @@ final class MonitorService: ObservableObject {
         switch state {
         case .disconnected:
             connectionState = .disconnected
+            BackgroundAudioService.shared.stop()
             if shouldAutoReconnect {
                 scheduleReconnect()
             }
@@ -154,8 +190,11 @@ final class MonitorService: ObservableObject {
         case .connected:
             connectionState = .connected
             errorMessage = nil
+            // Play silent audio to keep the app alive when backgrounded
+            BackgroundAudioService.shared.start()
         case .failed(let msg):
             connectionState = .failed(msg)
+            BackgroundAudioService.shared.stop()
             if shouldAutoReconnect {
                 scheduleReconnect()
             }
