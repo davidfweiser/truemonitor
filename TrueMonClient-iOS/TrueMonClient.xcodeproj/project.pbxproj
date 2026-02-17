@@ -16,6 +16,7 @@
 		A10007 /* MonitorConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* MonitorConnection.swift */; };
 		A10008 /* MonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008 /* MonitorService.swift */; };
 		A10009 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009 /* NotificationService.swift */; };
+		A10023 /* BackgroundAudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023 /* BackgroundAudioService.swift */; };
 		A10010 /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010 /* MonitorView.swift */; };
 		A10011 /* CPUCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011 /* CPUCard.swift */; };
 		A10012 /* MemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* MemoryCard.swift */; };
@@ -41,6 +42,7 @@
 		B10007 /* MonitorConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorConnection.swift; sourceTree = "<group>"; };
 		B10008 /* MonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorService.swift; sourceTree = "<group>"; };
 		B10009 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		B10023 /* BackgroundAudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioService.swift; sourceTree = "<group>"; };
 		B10010 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
 		B10011 /* CPUCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUCard.swift; sourceTree = "<group>"; };
 		B10012 /* MemoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryCard.swift; sourceTree = "<group>"; };
@@ -123,6 +125,7 @@
 			children = (
 				B10008 /* MonitorService.swift */,
 				B10009 /* NotificationService.swift */,
+				B10023 /* BackgroundAudioService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -254,6 +257,7 @@
 				A10007 /* MonitorConnection.swift in Sources */,
 				A10008 /* MonitorService.swift in Sources */,
 				A10009 /* NotificationService.swift in Sources */,
+				A10023 /* BackgroundAudioService.swift in Sources */,
 				A10010 /* MonitorView.swift in Sources */,
 				A10011 /* CPUCard.swift in Sources */,
 				A10012 /* MemoryCard.swift in Sources */,

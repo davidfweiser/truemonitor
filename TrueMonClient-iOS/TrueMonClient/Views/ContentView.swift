@@ -50,7 +50,7 @@ struct ContentView: View {
         .tint(AppTheme.accent)
         .environmentObject(service)
         .preferredColorScheme(.dark)
-        .onChange(of: scenePhase) { _, newPhase in
+        .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .active:
                 service.reconnectIfNeeded()
