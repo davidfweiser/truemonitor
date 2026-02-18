@@ -9,9 +9,25 @@ final class BackgroundAudioService {
 
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
-    private var isRunning = false
+    private(set) var isRunning = false
 
-    private init() {}
+    /// Called when audio is interrupted and then resumes (e.g. after a phone call).
+    var onInterruptionEnded: (() -> Void)?
+
+    private init() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
 
     func start() {
         guard !isRunning else { return }
@@ -74,6 +90,41 @@ final class BackgroundAudioService {
         player.scheduleBuffer(buffer) { [weak self] in
             guard let self = self, self.isRunning else { return }
             self.scheduleLoop(player: player, buffer: buffer)
+        }
+    }
+
+    /// Stop and restart — useful after an audio interruption ends.
+    func restart() {
+        stop()
+        start()
+    }
+
+    // MARK: - Interruption & Route Handling
+
+    @objc private func handleAudioInterruption(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        if type == .ended {
+            // Optionally check if we should resume
+            let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            if options.contains(.shouldResume) {
+                restart()
+                onInterruptionEnded?()
+            }
+        }
+    }
+
+    @objc private func handleRouteChange(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let reasonValue = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
+
+        // Old device unavailable (e.g. headphones unplugged) can pause playback
+        if reason == .oldDeviceUnavailable && isRunning {
+            restart()
         }
     }
 }

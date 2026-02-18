@@ -74,12 +74,22 @@ final class MonitorService: ObservableObject {
         memoryAlertEnabled = UserDefaults.standard.object(forKey: "memoryAlertEnabled") as? Bool ?? true
 
         loadAlerts()
+        if let saved = UserDefaults.standard.stringArray(forKey: "seenTrueNASAlerts") {
+            seenTrueNASAlerts = Set(saved)
+        }
 
         // Auto-connect on launch if a host is already configured
         if !serverHost.isEmpty {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 self?.connect()
+            }
+        }
+
+        // When audio resumes after a phone call etc., reconnect if needed
+        BackgroundAudioService.shared.onInterruptionEnded = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.reconnectIfNeeded()
             }
         }
 
@@ -153,7 +163,6 @@ final class MonitorService: ObservableObject {
         connection.disconnect()
         connectionState = .disconnected
         BackgroundAudioService.shared.stop()
-        seenTrueNASAlerts.removeAll()
     }
 
     // MARK: - Stats Handling
@@ -189,9 +198,11 @@ final class MonitorService: ObservableObject {
         switch state {
         case .disconnected:
             connectionState = .disconnected
-            BackgroundAudioService.shared.stop()
+            // Keep audio alive during reconnect so OS doesn't suspend us mid-cycle
             if shouldAutoReconnect {
                 scheduleReconnect()
+            } else {
+                BackgroundAudioService.shared.stop()
             }
         case .connecting:
             connectionState = .connecting
@@ -202,9 +213,11 @@ final class MonitorService: ObservableObject {
             BackgroundAudioService.shared.start()
         case .failed(let msg):
             connectionState = .failed(msg)
-            BackgroundAudioService.shared.stop()
+            // Keep audio alive during reconnect so OS doesn't suspend us mid-cycle
             if shouldAutoReconnect {
                 scheduleReconnect()
+            } else {
+                BackgroundAudioService.shared.stop()
             }
         }
     }
@@ -222,7 +235,13 @@ final class MonitorService: ObservableObject {
 
     private var lastAlertTimes: [String: Date] = [:]
     private let alertCooldown: TimeInterval = 300 // 5 minutes
-    private var seenTrueNASAlerts: Set<String> = []
+    /// IDs of TrueNAS alerts already shown — persisted so cleared alerts
+    /// don't re-appear when the app restarts and reconnects.
+    private var seenTrueNASAlerts: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(seenTrueNASAlerts), forKey: "seenTrueNASAlerts")
+        }
+    }
 
     private func evaluateAlerts(_ stats: ServerStats) {
         processSystemAlerts(stats.systemAlerts ?? [])
