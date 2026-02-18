@@ -827,6 +827,7 @@ class TrueMonitorApp:
         self._cpu_alert_active = False
         self._mem_alert_active = False
         self._seen_truenas_alerts = set()
+        self._connect_alert_times: dict = {}  # ip → last alert datetime
         self.pool_cards = {}
         self._pool_count = 0
         self._font_scale = FONT_SCALES.get(
@@ -2052,9 +2053,24 @@ class TrueMonitorApp:
 
     def _on_broadcast_security_event(self, level: str, ip: str, message: str):
         """Callback from BroadcastServer for connection/auth events — runs on a worker thread.
-        Only warning/critical events appear in the Alerts tab; routine info events go to debug log."""
+
+        Rules:
+        - "Connection from X" (raw TCP) is skipped — too noisy on reconnects.
+        - "Authenticated from X" is shown once per IP per 5 minutes so the
+          first login appears in the log without spamming on rapid reconnects.
+        - warning / critical always shown.
+        """
         if level == "info":
-            return  # already written to debug log by _emit(); no need to clutter the alerts tab
+            # Only show successful auth events, not bare TCP connections
+            if not message.startswith("Authenticated"):
+                return
+            # Per-IP cooldown: skip if same IP authenticated recently
+            now = datetime.now()
+            last = self._connect_alert_times.get(ip)
+            if last and (now - last).total_seconds() < 300:  # 5-minute cooldown
+                return
+            self._connect_alert_times[ip] = now
+
         sound = level == "critical"
         self.root.after(0, lambda: self._add_alert(level, message, popup=False, sound=sound))
 
