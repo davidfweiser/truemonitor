@@ -2051,7 +2051,10 @@ class TrueMonitorApp:
         self._update_broadcast_status()
 
     def _on_broadcast_security_event(self, level: str, ip: str, message: str):
-        """Callback from BroadcastServer for connection/auth events — runs on a worker thread."""
+        """Callback from BroadcastServer for connection/auth events — runs on a worker thread.
+        Only warning/critical events appear in the Alerts tab; routine info events go to debug log."""
+        if level == "info":
+            return  # already written to debug log by _emit(); no need to clutter the alerts tab
         sound = level == "critical"
         self.root.after(0, lambda: self._add_alert(level, message, popup=False, sound=sound))
 
