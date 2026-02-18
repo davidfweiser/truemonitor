@@ -2180,7 +2180,8 @@ class TrueMonitorApp:
         self._temp_alert_active = False
         self._cpu_alert_active = False
         self._mem_alert_active = False
-        self._seen_truenas_alerts.clear()
+        # Don't clear _seen_truenas_alerts — persistent TrueNAS alerts
+        # would otherwise re-appear in the log after every reconnect.
         self.notebook.tab(1, text="  Alerts  ")
         for card in self.pool_cards.values():
             card["frame"].destroy()
