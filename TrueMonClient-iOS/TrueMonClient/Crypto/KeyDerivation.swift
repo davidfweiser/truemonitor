@@ -38,4 +38,31 @@ enum KeyDerivation {
         let encryptionKey = derivedKey[16..<32]
         return (signingKey: Data(signingKey), encryptionKey: Data(encryptionKey))
     }
+
+    /// Returns the full 32-byte raw key — used for the HMAC auth handshake.
+    static func deriveRawKey(passphrase: String) -> Data? {
+        let salt = "truemonitor_broadcast_v1".data(using: .utf8)!
+        let passphraseData = passphrase.data(using: .utf8)!
+
+        var derivedKey = Data(count: 32)
+        let status = derivedKey.withUnsafeMutableBytes { derivedBytes in
+            passphraseData.withUnsafeBytes { passphraseBytes in
+                salt.withUnsafeBytes { saltBytes in
+                    CCKeyDerivationPBKDF(
+                        CCPBKDFAlgorithm(kCCPBKDF2),
+                        passphraseBytes.baseAddress?.assumingMemoryBound(to: Int8.self),
+                        passphraseData.count,
+                        saltBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                        salt.count,
+                        CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+                        100_000,
+                        derivedBytes.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                        32
+                    )
+                }
+            }
+        }
+        guard status == kCCSuccess else { return nil }
+        return derivedKey
+    }
 }

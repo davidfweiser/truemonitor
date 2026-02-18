@@ -17,6 +17,7 @@ from collections import deque
 
 import socket
 import struct
+import hmac as hmac_mod
 import tkinter.font as tkfont
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -33,7 +34,7 @@ except ImportError:
     print("  pip install requests")
     raise SystemExit(1)
 
-APP_VERSION = "0.2"
+APP_VERSION = "0.3"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -93,20 +94,59 @@ def _derive_broadcast_key(passphrase: str) -> bytes:
     return base64.urlsafe_b64encode(key_bytes)
 
 
+def _derive_broadcast_key_raw(passphrase: str) -> bytes:
+    """Derive the raw 32-byte key (used for HMAC auth handshake)."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"truemonitor_broadcast_v1",
+        iterations=100_000,
+    )
+    return kdf.derive(passphrase.encode())
+
+
+# Auth handshake magic sent by server after a client connects
+_AUTH_MAGIC = b"TRUEMON_AUTH\n"
+
+# How many wrong-key attempts before an IP is banned
+_MAX_AUTH_FAILURES = 3
+# Ban duration in seconds (24 hours)
+_BAN_DURATION = 86_400
+
+
 class BroadcastServer:
-    """TCP server that encrypts and streams stats to connected TrueMonClient instances."""
+    """TCP server that encrypts and streams stats to connected TrueMonClient instances.
+
+    Protocol:
+      1. Client connects.
+      2. Server sends _AUTH_MAGIC (13 bytes) + 32-byte random challenge.
+      3. Client must respond within 5 s with 32-byte HMAC-SHA256(challenge, raw_key).
+      4. Server verifies HMAC. Success → stream stats. Failure → log, count, ban after 3 tries.
+    """
 
     def __init__(self, port: int, passphrase: str):
         self.port = port
         self.passphrase = passphrase
-        self._clients = []
+        self._clients = []          # authenticated sockets
         self._lock = threading.Lock()
         self._running = False
         self._server_sock = None
         self._thread = None
 
+        # Security tracking (ip → list of failure timestamps)
+        self._auth_failures: dict[str, list] = {}
+        self._ban_list: dict[str, datetime] = {}   # ip → ban-expiry
+        self._sec_lock = threading.Lock()
+
+        # Optional callback: on_security_event(level, ip, message)
+        # level: "info" | "warning" | "critical"
+        self.on_security_event = None
+
     def _get_fernet(self):
         return Fernet(_derive_broadcast_key(self.passphrase))
+
+    def _get_raw_key(self) -> bytes:
+        return _derive_broadcast_key_raw(self.passphrase)
 
     def start(self):
         self._running = True
@@ -133,6 +173,10 @@ class BroadcastServer:
         with self._lock:
             return len(self._clients)
 
+    # ------------------------------------------------------------------
+    # Accept loop
+    # ------------------------------------------------------------------
+
     def _accept_loop(self):
         try:
             self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -144,10 +188,19 @@ class BroadcastServer:
             while self._running:
                 try:
                     conn, addr = self._server_sock.accept()
-                    conn.settimeout(10.0)
-                    with self._lock:
-                        self._clients.append(conn)
-                    debug(f"BroadcastServer: client connected from {addr}")
+                    ip = addr[0]
+                    # Reject banned IPs immediately
+                    if self._is_banned(ip):
+                        debug(f"BroadcastServer: rejected banned IP {ip}")
+                        conn.close()
+                        continue
+                    # Each new connection gets its own auth thread
+                    t = threading.Thread(
+                        target=self._authenticate_client,
+                        args=(conn, ip),
+                        daemon=True,
+                    )
+                    t.start()
                 except socket.timeout:
                     continue
                 except Exception:
@@ -155,8 +208,85 @@ class BroadcastServer:
         except Exception as e:
             debug(f"BroadcastServer error: {e}")
 
+    # ------------------------------------------------------------------
+    # Auth handshake
+    # ------------------------------------------------------------------
+
+    def _authenticate_client(self, conn: socket.socket, ip: str):
+        """Run the HMAC challenge/response handshake for one client."""
+        self._emit("info", ip, f"Connection from {ip}")
+        try:
+            challenge = os.urandom(32)
+            conn.sendall(_AUTH_MAGIC + challenge)
+            conn.settimeout(5.0)
+            response = b""
+            while len(response) < 32:
+                chunk = conn.recv(32 - len(response))
+                if not chunk:
+                    break
+                response += chunk
+        except Exception:
+            conn.close()
+            return
+
+        if len(response) != 32:
+            conn.close()
+            return
+
+        raw_key = self._get_raw_key()
+        expected = hmac_mod.new(raw_key, challenge, hashlib.sha256).digest()
+
+        if hmac_mod.compare_digest(response, expected):
+            # Authenticated
+            self._emit("info", ip, f"Authenticated from {ip}")
+            conn.settimeout(10.0)
+            with self._lock:
+                self._clients.append(conn)
+        else:
+            # Wrong key
+            self._record_failure(ip, conn)
+
+    def _record_failure(self, ip: str, conn: socket.socket):
+        """Count a wrong-key attempt; ban IP after _MAX_AUTH_FAILURES failures."""
+        conn.close()
+        with self._sec_lock:
+            now = datetime.now()
+            failures = self._auth_failures.get(ip, [])
+            # Prune failures older than the ban window
+            failures = [t for t in failures if (now - t).total_seconds() < _BAN_DURATION]
+            failures.append(now)
+            self._auth_failures[ip] = failures
+            count = len(failures)
+
+        self._emit("warning", ip,
+                   f"Wrong shared key from {ip} (attempt {count}/{_MAX_AUTH_FAILURES})")
+
+        if count >= _MAX_AUTH_FAILURES:
+            with self._sec_lock:
+                self._ban_list[ip] = datetime.now() + timedelta(seconds=_BAN_DURATION)
+            self._emit("critical", ip,
+                       f"{ip} blocked for 24 hours after {_MAX_AUTH_FAILURES} wrong-key attempts")
+
+    def _is_banned(self, ip: str) -> bool:
+        with self._sec_lock:
+            expiry = self._ban_list.get(ip)
+            if expiry and datetime.now() < expiry:
+                return True
+            if expiry:
+                del self._ban_list[ip]   # ban expired
+            return False
+
+    def _emit(self, level: str, ip: str, message: str):
+        debug(f"BroadcastServer [{level}] {message}")
+        if self.on_security_event:
+            self.on_security_event(level, ip, message)
+
+    # ------------------------------------------------------------------
+    # Stats broadcast
+    # ------------------------------------------------------------------
+
     def send_stats(self, stats: dict):
-        """Encrypt stats dict and send to all connected clients."""
+        """Encrypt stats dict and send to all authenticated clients."""
         if not self._clients:
             return
         try:
@@ -845,6 +975,10 @@ class TrueMonitorApp:
             hdr, text="TrueMonitor", bg=COLORS["bg"], fg=COLORS["accent"],
             font=("Helvetica", self._sf(20), "bold"),
         ).pack(side=tk.LEFT)
+        tk.Label(
+            hdr, text=f"v{APP_VERSION}", bg=COLORS["bg"], fg=COLORS["text_dim"],
+            font=("Helvetica", self._sf(9)),
+        ).pack(side=tk.LEFT, padx=(6, 0), pady=(6, 0))
         self.status_lbl = ttk.Label(hdr, text="Disconnected",
                                     style="Status.TLabel")
         self.status_lbl.pack(side=tk.RIGHT, padx=10)
@@ -870,9 +1004,6 @@ class TrueMonitorApp:
         self.footer = tk.Label(footer_frame, text="", bg=COLORS["bg"],
                                fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)))
         self.footer.pack(side=tk.LEFT)
-        tk.Label(footer_frame, text=f"v{APP_VERSION}", bg=COLORS["bg"],
-                 fg=COLORS["text_dim"], font=("Helvetica", self._sf(8))
-        ).pack(side=tk.RIGHT)
 
     def _make_card(self, parent, title, row, col):
         f = tk.Frame(
@@ -1915,8 +2046,14 @@ class TrueMonitorApp:
             port = self.config.get("broadcast_port", BROADCAST_DEFAULT_PORT)
             key = self.config.get("broadcast_key", BROADCAST_DEFAULT_KEY)
             self.broadcast_server = BroadcastServer(port, key)
+            self.broadcast_server.on_security_event = self._on_broadcast_security_event
             self.broadcast_server.start()
         self._update_broadcast_status()
+
+    def _on_broadcast_security_event(self, level: str, ip: str, message: str):
+        """Callback from BroadcastServer for connection/auth events — runs on a worker thread."""
+        sound = level == "critical"
+        self.root.after(0, lambda: self._add_alert(level, message, popup=False, sound=sound))
 
     def _update_broadcast_status(self):
         if not hasattr(self, "broadcast_status_lbl"):

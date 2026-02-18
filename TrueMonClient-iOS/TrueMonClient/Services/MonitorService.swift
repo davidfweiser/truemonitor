@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Combine
 import Security
+import Network
 
 /// Central service managing connection lifecycle, stats history, and alert evaluation.
 @MainActor
@@ -62,6 +63,7 @@ final class MonitorService: ObservableObject {
     private var shouldAutoReconnect = false
     private let notificationService = NotificationService()
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var pathMonitor: NWPathMonitor?
 
     // MARK: - Init
 
@@ -92,6 +94,8 @@ final class MonitorService: ObservableObject {
                 self?.reconnectIfNeeded()
             }
         }
+
+        startNetworkMonitor()
 
         connection.onStats = { [weak self] stats in
             Task { @MainActor [weak self] in
@@ -220,6 +224,17 @@ final class MonitorService: ObservableObject {
                 BackgroundAudioService.shared.stop()
             }
         }
+    }
+
+    private func startNetworkMonitor() {
+        pathMonitor = NWPathMonitor()
+        pathMonitor?.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor [weak self] in
+                self?.reconnectIfNeeded()
+            }
+        }
+        pathMonitor?.start(queue: DispatchQueue(label: "com.truemonitor.pathmonitor", qos: .utility))
     }
 
     private func scheduleReconnect() {

@@ -13,6 +13,7 @@ import socket
 import struct
 import base64
 import hashlib
+import hmac as hmac_mod
 import getpass
 from datetime import datetime
 from collections import deque
@@ -24,7 +25,7 @@ from cryptography.hazmat.primitives import hashes
 
 FONT_SCALES = {"Small": 0.85, "Medium": 1.0, "Large": 1.15}
 
-APP_VERSION = "0.2"
+APP_VERSION = "0.3"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonclient")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -80,6 +81,21 @@ def _derive_broadcast_key(passphrase: str) -> bytes:
     )
     key_bytes = kdf.derive(passphrase.encode())
     return base64.urlsafe_b64encode(key_bytes)
+
+
+def _derive_broadcast_key_raw(passphrase: str) -> bytes:
+    """Derive the raw 32-byte key used for HMAC auth handshake."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"truemonitor_broadcast_v1",
+        iterations=100_000,
+    )
+    return kdf.derive(passphrase.encode())
+
+
+# Magic prefix sent by server to initiate auth
+_AUTH_MAGIC = b"TRUEMON_AUTH\n"
 
 
 COLORS = {
@@ -167,8 +183,27 @@ class MonitorClient:
                 self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self._sock.settimeout(10.0)
                 self._sock.connect((self.host, self.port))
-                self._sock.settimeout(60.0)
+                self._sock.settimeout(10.0)
                 debug(f"MonitorClient: connected to {self.host}:{self.port}")
+
+                # --- Auth handshake ---
+                magic = self._recvn(len(_AUTH_MAGIC))
+                if magic != _AUTH_MAGIC:
+                    debug("MonitorClient: unexpected auth magic, disconnecting")
+                    self.on_error("Protocol error — server did not send auth challenge")
+                    break
+                challenge = self._recvn(32)
+                if challenge is None or len(challenge) != 32:
+                    debug("MonitorClient: failed to receive auth challenge")
+                    self.on_error("Auth challenge receive error")
+                    break
+                raw_key = _derive_broadcast_key_raw(self.passphrase)
+                response = hmac_mod.new(raw_key, challenge, hashlib.sha256).digest()
+                self._sock.sendall(response)
+                debug("MonitorClient: sent auth response")
+                # Server drops the connection immediately on wrong key; give it a moment
+                self._sock.settimeout(60.0)
+
                 self.on_connected()
                 fernet = self._get_fernet()
                 stats_count = 0
@@ -420,6 +455,10 @@ class TrueMonClientApp:
             hdr, text="TrueMonClient", bg=COLORS["bg"], fg=COLORS["accent"],
             font=("Helvetica", self._sf(20), "bold"),
         ).pack(side=tk.LEFT)
+        tk.Label(
+            hdr, text=f"v{APP_VERSION}", bg=COLORS["bg"], fg=COLORS["text_dim"],
+            font=("Helvetica", self._sf(9)),
+        ).pack(side=tk.LEFT, padx=(6, 0), pady=(6, 0))
         self.status_lbl = ttk.Label(hdr, text="Disconnected",
                                     style="Status.TLabel")
         self.status_lbl.pack(side=tk.RIGHT, padx=10)
@@ -445,9 +484,6 @@ class TrueMonClientApp:
         self.footer = tk.Label(footer_frame, text="", bg=COLORS["bg"],
                                fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)))
         self.footer.pack(side=tk.LEFT)
-        tk.Label(footer_frame, text=f"v{APP_VERSION}", bg=COLORS["bg"],
-                 fg=COLORS["text_dim"], font=("Helvetica", self._sf(8))
-        ).pack(side=tk.RIGHT)
 
     def _make_card(self, parent, title, row, col):
         f = tk.Frame(

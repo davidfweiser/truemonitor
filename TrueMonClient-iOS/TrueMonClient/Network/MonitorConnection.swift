@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import CommonCrypto
 
 /// TCP client that connects to a TrueMonitor broadcast server,
 /// reads length-prefixed Fernet-encrypted JSON frames, and decodes them.
@@ -17,6 +18,7 @@ final class MonitorConnection {
 
     private var signingKey: Data?
     private var encryptionKey: Data?
+    private var rawKey: Data?
 
     var onStats: ((ServerStats) -> Void)?
     var onStateChange: ((State) -> Void)?
@@ -24,24 +26,28 @@ final class MonitorConnection {
 
     private var isRunning = false
 
+    // TRUEMON_AUTH\n as bytes (13 bytes)
+    private static let authMagic = "TRUEMON_AUTH\n".data(using: .utf8)!
+
     func connect(host: String, port: UInt16, passphrase: String) {
         disconnect()
 
-        guard let keys = KeyDerivation.deriveFernetKey(passphrase: passphrase) else {
+        guard let keys = KeyDerivation.deriveFernetKey(passphrase: passphrase),
+              let raw = KeyDerivation.deriveRawKey(passphrase: passphrase) else {
             onError?("Key derivation failed")
             onStateChange?(.failed("Key derivation failed"))
             return
         }
         signingKey = keys.signingKey
         encryptionKey = keys.encryptionKey
+        rawKey = raw
 
         let nwHost = NWEndpoint.Host(host)
         let nwPort = NWEndpoint.Port(rawValue: port)!
 
         let params = NWParameters.tcp
-        params.requiredInterfaceType = .wifi
 
-        let conn = NWConnection(host: nwHost, port: nwPort, using: .tcp)
+        let conn = NWConnection(host: nwHost, port: nwPort, using: params)
         connection = conn
         isRunning = true
 
@@ -49,8 +55,8 @@ final class MonitorConnection {
             guard let self = self else { return }
             switch state {
             case .ready:
-                self.onStateChange?(.connected)
-                self.readFrame()
+                // Don't report .connected yet — wait for auth to complete
+                self.readAuthMagic()
             case .waiting(let error):
                 self.onStateChange?(.failed("Waiting: \(error.localizedDescription)"))
             case .failed(let error):
@@ -73,6 +79,73 @@ final class MonitorConnection {
         isRunning = false
         connection?.cancel()
         connection = nil
+    }
+
+    // MARK: - Auth Handshake
+
+    /// Step 1: read the 13-byte magic "TRUEMON_AUTH\n".
+    private func readAuthMagic() {
+        guard isRunning, let conn = connection else { return }
+        let magicLen = Self.authMagic.count  // 13
+
+        conn.receive(minimumIncompleteLength: magicLen, maximumLength: magicLen) { [weak self] data, _, isComplete, error in
+            guard let self = self, self.isRunning else { return }
+            if let error = error {
+                self.onError?(error.localizedDescription)
+                self.onStateChange?(.failed(error.localizedDescription))
+                return
+            }
+            guard let magic = data, magic == Self.authMagic else {
+                self.onError?("Protocol error — unexpected auth header")
+                self.onStateChange?(.failed("Protocol error"))
+                self.connection?.cancel()
+                return
+            }
+            self.readAuthChallenge()
+        }
+    }
+
+    /// Step 2: read the 32-byte random challenge.
+    private func readAuthChallenge() {
+        guard isRunning, let conn = connection else { return }
+
+        conn.receive(minimumIncompleteLength: 32, maximumLength: 32) { [weak self] data, _, isComplete, error in
+            guard let self = self, self.isRunning else { return }
+            if let error = error {
+                self.onError?(error.localizedDescription)
+                self.onStateChange?(.failed(error.localizedDescription))
+                return
+            }
+            guard let challenge = data, challenge.count == 32, let rawKey = self.rawKey else {
+                self.onError?("Auth challenge receive error")
+                self.onStateChange?(.failed("Auth error"))
+                self.connection?.cancel()
+                return
+            }
+            // Compute HMAC-SHA256(rawKey, challenge)
+            var hmacBytes = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+            challenge.withUnsafeBytes { challengePtr in
+                rawKey.withUnsafeBytes { keyPtr in
+                    CCHmac(CCHmacAlgorithm(kCCHmacAlgSHA256),
+                           keyPtr.baseAddress, rawKey.count,
+                           challengePtr.baseAddress, challenge.count,
+                           &hmacBytes)
+                }
+            }
+            let response = Data(hmacBytes)
+            conn.send(content: response, completion: .contentProcessed { [weak self] error in
+                guard let self = self, self.isRunning else { return }
+                if let error = error {
+                    self.onError?(error.localizedDescription)
+                    self.onStateChange?(.failed(error.localizedDescription))
+                    return
+                }
+                // Auth sent — server will close connection immediately on wrong key,
+                // or start sending frames on success.
+                self.onStateChange?(.connected)
+                self.readFrame()
+            })
+        }
     }
 
     // MARK: - Frame Reading
