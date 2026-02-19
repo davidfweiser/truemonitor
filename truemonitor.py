@@ -108,10 +108,11 @@ def _derive_broadcast_key_raw(passphrase: str) -> bytes:
 # Auth handshake magic sent by server after a client connects
 _AUTH_MAGIC = b"TRUEMON_AUTH\n"
 
-# How many wrong-key attempts before an IP is banned
-_MAX_AUTH_FAILURES = 3
-# Ban duration in seconds (24 hours)
-_BAN_DURATION = 86_400
+# Exponential backoff delays (seconds) indexed by failure count (0-based).
+# After the Nth wrong-key attempt the IP must wait this long before the
+# server will accept a new connection from it.  No permanent ban — the
+# backoff resets once enough time has passed with no new failures.
+_BACKOFF_DELAYS = [5, 30, 300]   # 5 s, 30 s, 5 min
 
 
 class BroadcastServer:
@@ -121,7 +122,8 @@ class BroadcastServer:
       1. Client connects.
       2. Server sends _AUTH_MAGIC (13 bytes) + 32-byte random challenge.
       3. Client must respond within 5 s with 32-byte HMAC-SHA256(challenge, raw_key).
-      4. Server verifies HMAC. Success → stream stats. Failure → log, count, ban after 3 tries.
+      4. Server verifies HMAC. Success → stream stats.
+         Failure → exponential backoff (5s / 30s / 5min), never a permanent ban.
     """
 
     def __init__(self, port: int, passphrase: str):
@@ -133,9 +135,8 @@ class BroadcastServer:
         self._server_sock = None
         self._thread = None
 
-        # Security tracking (ip → list of failure timestamps)
-        self._auth_failures: dict[str, list] = {}
-        self._ban_list: dict[str, datetime] = {}   # ip → ban-expiry
+        # ip → (failure_count, last_failure_time)
+        self._auth_failures: dict[str, tuple] = {}
         self._sec_lock = threading.Lock()
 
         # Optional callback: on_security_event(level, ip, message)
@@ -189,9 +190,10 @@ class BroadcastServer:
                 try:
                     conn, addr = self._server_sock.accept()
                     ip = addr[0]
-                    # Reject banned IPs immediately
-                    if self._is_banned(ip):
-                        debug(f"BroadcastServer: rejected banned IP {ip}")
+                    # Enforce backoff: silently drop connections arriving too soon
+                    wait = self._backoff_remaining(ip)
+                    if wait > 0:
+                        debug(f"BroadcastServer: backoff {wait:.0f}s remaining for {ip}")
                         conn.close()
                         continue
                     # Each new connection gets its own auth thread
@@ -247,34 +249,32 @@ class BroadcastServer:
             self._record_failure(ip, conn)
 
     def _record_failure(self, ip: str, conn: socket.socket):
-        """Count a wrong-key attempt; ban IP after _MAX_AUTH_FAILURES failures."""
+        """Apply exponential backoff on a wrong-key attempt (no permanent ban)."""
         conn.close()
         with self._sec_lock:
-            now = datetime.now()
-            failures = self._auth_failures.get(ip, [])
-            # Prune failures older than the ban window
-            failures = [t for t in failures if (now - t).total_seconds() < _BAN_DURATION]
-            failures.append(now)
-            self._auth_failures[ip] = failures
-            count = len(failures)
+            count, _ = self._auth_failures.get(ip, (0, None))
+            count += 1
+            self._auth_failures[ip] = (count, datetime.now())
 
+        delay = _BACKOFF_DELAYS[min(count - 1, len(_BACKOFF_DELAYS) - 1)]
         self._emit("warning", ip,
-                   f"Wrong shared key from {ip} (attempt {count}/{_MAX_AUTH_FAILURES})")
+                   f"Wrong shared key from {ip} — retry in {delay}s")
 
-        if count >= _MAX_AUTH_FAILURES:
-            with self._sec_lock:
-                self._ban_list[ip] = datetime.now() + timedelta(seconds=_BAN_DURATION)
-            self._emit("critical", ip,
-                       f"{ip} blocked for 24 hours after {_MAX_AUTH_FAILURES} wrong-key attempts")
-
-    def _is_banned(self, ip: str) -> bool:
+    def _backoff_remaining(self, ip: str) -> float:
+        """Return seconds the IP must still wait, or 0 if it may connect."""
         with self._sec_lock:
-            expiry = self._ban_list.get(ip)
-            if expiry and datetime.now() < expiry:
-                return True
-            if expiry:
-                del self._ban_list[ip]   # ban expired
-            return False
+            entry = self._auth_failures.get(ip)
+            if not entry:
+                return 0
+            count, last = entry
+            delay = _BACKOFF_DELAYS[min(count - 1, len(_BACKOFF_DELAYS) - 1)]
+            elapsed = (datetime.now() - last).total_seconds()
+            remaining = delay - elapsed
+            if remaining <= 0:
+                # Backoff expired — clear the record so the slate is clean
+                del self._auth_failures[ip]
+                return 0
+            return remaining
 
     def _emit(self, level: str, ip: str, message: str):
         debug(f"BroadcastServer [{level}] {message}")
@@ -2058,7 +2058,7 @@ class TrueMonitorApp:
         - "Connection from X" (raw TCP) is skipped — too noisy on reconnects.
         - "Authenticated from X" is shown once per IP per 5 minutes so the
           first login appears in the log without spamming on rapid reconnects.
-        - warning / critical always shown.
+        - warning events (wrong key / backoff) always shown.
         """
         if level == "info":
             # Only show successful auth events, not bare TCP connections
@@ -2071,8 +2071,7 @@ class TrueMonitorApp:
                 return
             self._connect_alert_times[ip] = now
 
-        sound = level == "critical"
-        self.root.after(0, lambda: self._add_alert(level, message, popup=False, sound=sound))
+        self.root.after(0, lambda: self._add_alert(level, message, popup=False, sound=False))
 
     def _update_broadcast_status(self):
         if not hasattr(self, "broadcast_status_lbl"):
