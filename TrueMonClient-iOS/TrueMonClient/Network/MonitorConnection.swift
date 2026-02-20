@@ -45,7 +45,11 @@ final class MonitorConnection {
         let nwHost = NWEndpoint.Host(host)
         let nwPort = NWEndpoint.Port(rawValue: port)!
 
-        let params = NWParameters.tcp
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.enableKeepalive = true
+        tcpOptions.keepaliveIdle = 10
+
+        let params = NWParameters(tls: nil, tcp: tcpOptions)
 
         let conn = NWConnection(host: nwHost, port: nwPort, using: params)
         connection = conn

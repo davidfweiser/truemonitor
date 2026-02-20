@@ -73,6 +73,8 @@ final class DataModule: ObservableObject {
     private let notificationService = NotificationService()
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var pathMonitor: NWPathMonitor?
+    private var lastDataReceived: Date?
+    private var watchdogTimer: Timer?
 
     private var lastAlertTimes: [String: Date] = [:]
     private let alertCooldown: TimeInterval = 300 // 5 minutes
@@ -133,7 +135,14 @@ final class DataModule: ObservableObject {
         endBackgroundTask()
         guard shouldAutoReconnect else { return }
         switch connectionState {
-        case .connected, .connecting:
+        case .connected:
+            // If connected but data is stale, force reconnect
+            if let last = lastDataReceived, Date().timeIntervalSince(last) > 30 {
+                connection.disconnect()
+                connect()
+            }
+            return
+        case .connecting:
             return
         default:
             reconnectTask?.cancel()
@@ -154,6 +163,7 @@ final class DataModule: ObservableObject {
         shouldAutoReconnect = false
         reconnectTask?.cancel()
         reconnectTask = nil
+        stopWatchdog()
         endBackgroundTask()
         connection.disconnect()
         connectionState = .disconnected
@@ -221,6 +231,7 @@ final class DataModule: ObservableObject {
     }
 
     private func handleStats(_ newStats: ServerStats) {
+        lastDataReceived = Date()
         stats = newStats
 
         if let rx = newStats.netRx {
@@ -243,6 +254,7 @@ final class DataModule: ObservableObject {
         switch state {
         case .disconnected:
             connectionState = .disconnected
+            stopWatchdog()
             if shouldAutoReconnect {
                 scheduleReconnect()
             } else {
@@ -253,9 +265,12 @@ final class DataModule: ObservableObject {
         case .connected:
             connectionState = .connected
             errorMessage = nil
+            lastDataReceived = Date()
+            startWatchdog()
             BackgroundAudioService.shared.start()
         case .failed(let msg):
             connectionState = .failed(msg)
+            stopWatchdog()
             if shouldAutoReconnect {
                 scheduleReconnect()
             } else {
@@ -282,6 +297,28 @@ final class DataModule: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.connect()
         }
+    }
+
+    private func startWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkWatchdog()
+            }
+        }
+    }
+
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = nil
+        lastDataReceived = nil
+    }
+
+    private func checkWatchdog() {
+        guard connectionState == .connected, shouldAutoReconnect else { return }
+        guard let last = lastDataReceived, Date().timeIntervalSince(last) > 30 else { return }
+        connection.disconnect()
+        connect()
     }
 
     private func endBackgroundTask() {

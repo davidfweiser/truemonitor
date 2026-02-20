@@ -1,5 +1,16 @@
 import SwiftUI
 
+private extension View {
+    @ViewBuilder
+    func if_iOS26_tabBarOnly() -> some View {
+        if #available(iOS 26.0, *) {
+            self.tabViewStyle(.tabBarOnly)
+        } else {
+            self
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var display: DisplayModule
     @EnvironmentObject var data: DataModule
@@ -46,6 +57,7 @@ struct ContentView: View {
                     Label("Settings", systemImage: "gear")
                 }
             }
+            .if_iOS26_tabBarOnly()
         }
         .tint(AppTheme.accent)
         .preferredColorScheme(.dark)
