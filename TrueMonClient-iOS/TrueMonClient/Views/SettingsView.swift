@@ -1,33 +1,43 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var service: MonitorService
+    @EnvironmentObject var data: DataModule
     @State private var passphrase: String = ""
     @State private var portString: String = ""
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case host, port, key }
 
     var body: some View {
         Form {
             // Connection
             Section {
-                TextField("Server Host", text: $service.serverHost)
+                TextField("Server Host", text: $data.serverHost)
                     .textContentType(.URL)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .foregroundColor(AppTheme.text)
+                    .focused($focusedField, equals: .host)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .port }
 
                 TextField("Port", text: $portString)
                     .keyboardType(.numberPad)
                     .foregroundColor(AppTheme.text)
+                    .focused($focusedField, equals: .port)
                     .onChange(of: portString) { newValue in
                         if let p = UInt16(newValue) {
-                            service.serverPort = p
+                            data.serverPort = p
                         }
                     }
 
                 SecureField("Shared Key", text: $passphrase)
                     .foregroundColor(AppTheme.text)
+                    .focused($focusedField, equals: .key)
+                    .submitLabel(.done)
+                    .onSubmit { focusedField = nil }
                     .onChange(of: passphrase) { newValue in
-                        service.savePassphrase(newValue)
+                        data.savePassphrase(newValue)
                     }
             } header: {
                 Text("Connection")
@@ -36,18 +46,18 @@ struct SettingsView: View {
             // Connect / Disconnect
             Section {
                 Button {
-                    if service.connectionState == .connected {
-                        service.disconnect()
+                    if data.connectionState == .connected {
+                        data.disconnect()
                     } else {
-                        service.connect()
+                        data.connect()
                     }
                 } label: {
                     HStack {
                         Spacer()
-                        if service.connectionState == .connected {
+                        if data.connectionState == .connected {
                             Label("Disconnect", systemImage: "xmark.circle")
                                 .foregroundColor(AppTheme.critical)
-                        } else if service.connectionState == .connecting {
+                        } else if data.connectionState == .connecting {
                             ProgressView()
                                 .tint(AppTheme.accent)
                             Text("Connecting...")
@@ -67,12 +77,12 @@ struct SettingsView: View {
                     Circle()
                         .fill(statusColor)
                         .frame(width: 8, height: 8)
-                    Text(service.connectionState.label)
+                    Text(data.connectionState.label)
                         .font(.caption)
                         .foregroundColor(AppTheme.textDim)
                 }
 
-                if let error = service.errorMessage {
+                if let error = data.errorMessage {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(AppTheme.critical)
@@ -82,16 +92,16 @@ struct SettingsView: View {
             // Alert Thresholds
             Section {
                 VStack(alignment: .leading) {
-                    Text("CPU Temp Threshold: \(Int(service.tempThreshold))°C")
+                    Text("CPU Temp Threshold: \(Int(data.tempThreshold))°C")
                         .foregroundColor(AppTheme.text)
-                    Slider(value: $service.tempThreshold, in: 40...96, step: 1)
+                    Slider(value: $data.tempThreshold, in: 40...96, step: 1)
                         .tint(AppTheme.accent)
                 }
 
-                Toggle("CPU Usage Alerts (>95%)", isOn: $service.cpuAlertEnabled)
+                Toggle("CPU Usage Alerts (>95%)", isOn: $data.cpuAlertEnabled)
                     .tint(AppTheme.accent)
 
-                Toggle("Memory Usage Alerts (>95%)", isOn: $service.memoryAlertEnabled)
+                Toggle("Memory Usage Alerts (>95%)", isOn: $data.memoryAlertEnabled)
                     .tint(AppTheme.accent)
             } header: {
                 Text("Alert Thresholds")
@@ -100,13 +110,13 @@ struct SettingsView: View {
             // About
             Section {
                 HStack {
-                    Text("Version")
+                    Text("TrueMonClient")
                         .foregroundColor(AppTheme.textDim)
                     Spacer()
-                    Text("1.0")
+                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
                         .foregroundColor(AppTheme.textDim)
                 }
-                if let stats = service.stats {
+                if let stats = data.stats {
                     if let hostname = stats.hostname {
                         HStack {
                             Text("Server")
@@ -118,7 +128,7 @@ struct SettingsView: View {
                     }
                     if let version = stats.version {
                         HStack {
-                            Text("TrueNAS Version")
+                            Text("TrueMonitor")
                                 .foregroundColor(AppTheme.textDim)
                             Spacer()
                             Text(version)
@@ -135,22 +145,32 @@ struct SettingsView: View {
         .background {
             AppTheme.backgroundGradient.ignoresSafeArea()
         }
+        .onTapGesture {
+            focusedField = nil
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+                    .fontWeight(.semibold)
+            }
+        }
         .onAppear {
-            portString = String(service.serverPort)
-            passphrase = service.loadPassphrase() ?? "truemonitor"
+            portString = String(data.serverPort)
+            passphrase = data.loadPassphrase() ?? "truemonitor"
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    if service.connectionState == .connected {
-                        service.disconnect()
+                    if data.connectionState == .connected {
+                        data.disconnect()
                     } else {
-                        service.connect()
+                        data.connect()
                     }
                 } label: {
-                    if service.connectionState == .connecting {
+                    if data.connectionState == .connecting {
                         ProgressView().tint(AppTheme.accent)
-                    } else if service.connectionState == .connected {
+                    } else if data.connectionState == .connected {
                         Label("Disconnect", systemImage: "xmark.circle.fill")
                             .foregroundStyle(AppTheme.critical)
                     } else {
@@ -163,7 +183,7 @@ struct SettingsView: View {
     }
 
     private var statusColor: Color {
-        switch service.connectionState {
+        switch data.connectionState {
         case .connected:    return AppTheme.good
         case .connecting:   return AppTheme.warning
         case .disconnected: return AppTheme.textDim

@@ -88,12 +88,21 @@ final class BackgroundAudioService {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         guard isRunning else { return }
-        playerNode?.stop()
-        audioEngine?.stop()
+        isRunning = false
+
+        // Capture before clearing so the background task can clean them up
+        let engine = audioEngine
+        let player = playerNode
         audioEngine = nil
         playerNode = nil
-        isRunning = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        // AVAudioEngine.stop() and AVAudioSession.setActive(false) can block the
+        // calling thread while notifying other apps — run them off the main thread.
+        DispatchQueue.global(qos: .utility).async {
+            player?.stop()
+            engine?.stop()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 
     /// Stop and restart — useful after an audio interruption ends.

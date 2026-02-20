@@ -1,113 +1,57 @@
 import SwiftUI
 import BackgroundTasks
-import UserNotifications
+
+// MARK: - DisplayModule
+// Manages display-only state. Does not own any data.
+//
+// The display layer naturally sleeps when the iPhone screen turns off or the
+// app is minimized — SwiftUI stops rendering and this object goes idle.
+// DataModule continues running (kept alive by background audio).
+//
+// When the user opens the app again, SwiftUI re-renders and views immediately
+// show the current live data that DataModule has been collecting.
+@MainActor
+final class DisplayModule: ObservableObject {
+
+    /// The currently selected tab (Monitor / Alerts / Settings).
+    @Published var selectedTab: Int = 0
+
+    // MARK: - Scene Lifecycle
+
+    /// Called when the app becomes active (screen on, app in foreground).
+    /// DataModule is already running; views automatically reflect its latest state.
+    func didBecomeActive() {
+        DataModule.shared.reconnectIfNeeded()
+    }
+
+    /// Called when the app enters the background (screen off or app minimized).
+    /// DataModule keeps the connection alive via background audio.
+    func willResignActive() {
+        DataModule.shared.beginBackgroundExecution()
+        DataModule.shared.scheduleBackgroundRefresh()
+    }
+}
+
+// MARK: - App Entry Point
 
 @main
 struct TrueMonClientApp: App {
 
-    init() {
-        // Request notification permissions on first launch
-        NotificationService().requestPermission()
+    /// Display module lives here — one instance for the lifetime of the app.
+    @StateObject private var display = DisplayModule()
 
-        // Register background task
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: "com.truemonitor.client.refresh",
-            using: nil
-        ) { task in
-            Self.handleBackgroundRefresh(task as! BGProcessingTask)
-        }
+    init() {
+        NotificationService().requestPermission()
+        // Initialize DataModule.shared early so background task handlers are
+        // registered before the first scene renders.
+        DataModule.shared.registerBackgroundTask()
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .onReceive(NotificationCenter.default.publisher(
-                    for: UIApplication.willResignActiveNotification
-                )) { _ in
-                    scheduleBackgroundRefresh()
-                }
+                .environmentObject(display)
+                .environmentObject(DataModule.shared)
         }
-    }
-
-    // MARK: - Background Tasks
-
-    private func scheduleBackgroundRefresh() {
-        let request = BGProcessingTaskRequest(identifier: "com.truemonitor.client.refresh")
-        request.requiresNetworkConnectivity = true
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60) // 15 minutes
-        try? BGTaskScheduler.shared.submit(request)
-    }
-
-    private static func handleBackgroundRefresh(_ task: BGProcessingTask) {
-        let host = UserDefaults.standard.string(forKey: "serverHost") ?? ""
-        let port = UserDefaults.standard.integer(forKey: "serverPort")
-        guard !host.isEmpty, port > 0 else {
-            task.setTaskCompleted(success: true)
-            return
-        }
-
-        // Load passphrase from keychain
-        let passphrase = loadKeychainPassphrase() ?? "truemonitor"
-
-        let connection = MonitorConnection()
-        var receivedCount = 0
-        let tempThreshold = UserDefaults.standard.object(forKey: "tempThreshold") as? Double ?? 80.0
-
-        connection.onStats = { stats in
-            receivedCount += 1
-
-            // Check alert conditions
-            if let temp = stats.cpuTemp, temp > tempThreshold {
-                let alert = AlertItem(level: temp > 90 ? .critical : .warning,
-                                      message: "CPU temperature \(String(format: "%.0f", temp))°C exceeds threshold")
-                NotificationService().postAlert(alert)
-            }
-            if let cpu = stats.cpuPercent, cpu > 95 {
-                let alert = AlertItem(level: .warning, message: "CPU usage at \(String(format: "%.1f", cpu))%")
-                NotificationService().postAlert(alert)
-            }
-            if let mem = stats.memoryPercent, mem > 95 {
-                let alert = AlertItem(level: .warning, message: "Memory usage at \(String(format: "%.1f", mem))%")
-                NotificationService().postAlert(alert)
-            }
-
-            // Disconnect after receiving a couple of updates
-            if receivedCount >= 2 {
-                connection.disconnect()
-                task.setTaskCompleted(success: true)
-            }
-        }
-
-        connection.onError = { _ in
-            task.setTaskCompleted(success: false)
-        }
-
-        task.expirationHandler = {
-            connection.disconnect()
-        }
-
-        connection.connect(host: host, port: UInt16(port), passphrase: passphrase)
-
-        // Schedule next refresh
-        let request = BGProcessingTaskRequest(identifier: "com.truemonitor.client.refresh")
-        request.requiresNetworkConnectivity = true
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(request)
-    }
-
-    private static func loadKeychainPassphrase() -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.truemonitor.client",
-            kSecAttrAccount as String: "broadcastKey",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecSuccess, let data = result as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }

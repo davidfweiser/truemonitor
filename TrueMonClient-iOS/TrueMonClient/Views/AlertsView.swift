@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct AlertsView: View {
-    @EnvironmentObject var service: MonitorService
+    @EnvironmentObject var data: DataModule
 
     var body: some View {
         VStack(spacing: 0) {
-            if service.alerts.isEmpty {
+            if data.alerts.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "checkmark.shield")
@@ -18,12 +18,12 @@ struct AlertsView: View {
                 Spacer()
             } else {
                 HStack {
-                    Text("\(service.alerts.count) alert\(service.alerts.count == 1 ? "" : "s")")
+                    Text("\(data.alerts.count) alert\(data.alerts.count == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundColor(AppTheme.textDim)
                     Spacer()
                     Button("Clear All") {
-                        service.clearAlerts()
+                        data.clearAlerts()
                     }
                     .font(.caption)
                     .tint(AppTheme.critical)
@@ -32,7 +32,7 @@ struct AlertsView: View {
                 .padding(.vertical, 8)
 
                 List {
-                    ForEach(service.alerts) { alert in
+                    ForEach(data.alerts) { alert in
                         alertRow(alert)
                             .listRowBackground(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)

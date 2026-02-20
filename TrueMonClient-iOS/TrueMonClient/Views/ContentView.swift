@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var service = MonitorService()
+    @EnvironmentObject var display: DisplayModule
+    @EnvironmentObject var data: DataModule
     @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedTab = 0
 
     var body: some View {
         ZStack {
@@ -11,7 +11,7 @@ struct ContentView: View {
             AppTheme.backgroundGradient
                 .ignoresSafeArea()
 
-            TabView(selection: $selectedTab) {
+            TabView(selection: $display.selectedTab) {
                 NavigationStack {
                     MonitorView()
                         .navigationTitle("TrueMonitor")
@@ -33,7 +33,7 @@ struct ContentView: View {
                 .tabItem {
                     Label("Alerts", systemImage: "bell")
                 }
-                .badge(service.alerts.count)
+                .badge(data.alerts.count)
 
                 NavigationStack {
                     SettingsView()
@@ -48,24 +48,23 @@ struct ContentView: View {
             }
         }
         .tint(AppTheme.accent)
-        .environmentObject(service)
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .active:
-                service.reconnectIfNeeded()
+                display.didBecomeActive()
             case .background:
-                service.beginBackgroundExecution()
+                display.willResignActive()
             default:
                 break
             }
         }
         .onOpenURL { url in
-            if url.host == "settings" { selectedTab = 2 }
-            else if url.host == "alerts" { selectedTab = 1 }
-            else if url.host == "monitor" { selectedTab = 0 }
-            else if url.host == "connect" { service.connect() }
-            else if url.host == "disconnect" { service.disconnect() }
+            if url.host == "settings"        { display.selectedTab = 2 }
+            else if url.host == "alerts"     { display.selectedTab = 1 }
+            else if url.host == "monitor"    { display.selectedTab = 0 }
+            else if url.host == "connect"    { data.connect() }
+            else if url.host == "disconnect" { data.disconnect() }
         }
     }
 }

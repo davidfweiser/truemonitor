@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MonitorView: View {
-    @EnvironmentObject var service: MonitorService
+    @EnvironmentObject var data: DataModule
 
     var body: some View {
         ScrollView {
@@ -9,7 +9,7 @@ struct MonitorView: View {
                 // Connection status header
                 connectionHeader
 
-                if let stats = service.stats {
+                if let stats = data.stats {
                     // System info
                     systemInfoRow(stats)
 
@@ -28,13 +28,13 @@ struct MonitorView: View {
                         netRx: stats.netRx,
                         netTx: stats.netTx,
                         netIface: stats.netIface,
-                        rxHistory: service.netRxHistory,
-                        txHistory: service.netTxHistory
+                        rxHistory: data.netRxHistory,
+                        txHistory: data.netTxHistory
                     )
 
                     TemperatureCard(
                         cpuTemp: stats.cpuTemp,
-                        tempHistory: service.tempHistory
+                        tempHistory: data.tempHistory
                     )
 
                     // Pool cards
@@ -43,11 +43,11 @@ struct MonitorView: View {
                             PoolCard(pool: pool)
                         }
                     }
-                } else if service.connectionState == .connected {
+                } else if data.connectionState == .connected {
                     Text("Waiting for data...")
                         .foregroundColor(AppTheme.textDim)
                         .padding(.top, 40)
-                } else if case .disconnected = service.connectionState {
+                } else if case .disconnected = data.connectionState {
                     VStack(spacing: 12) {
                         Image(systemName: "antenna.radiowaves.left.and.right.slash")
                             .font(.system(size: 48))
@@ -75,13 +75,13 @@ struct MonitorView: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 8, height: 8)
-            Text(service.connectionState.label)
+            Text(data.connectionState.label)
                 .font(.caption)
                 .foregroundColor(AppTheme.textDim)
 
             Spacer()
 
-            if let error = service.errorMessage {
+            if let error = data.errorMessage {
                 Text(error)
                     .font(.caption2)
                     .foregroundColor(AppTheme.critical)
@@ -92,7 +92,7 @@ struct MonitorView: View {
     }
 
     private var statusColor: Color {
-        switch service.connectionState {
+        switch data.connectionState {
         case .connected:    return AppTheme.good
         case .connecting:   return AppTheme.warning
         case .disconnected: return AppTheme.textDim

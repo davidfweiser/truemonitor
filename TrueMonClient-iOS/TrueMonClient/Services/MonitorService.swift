@@ -3,10 +3,19 @@ import UIKit
 import Combine
 import Security
 import Network
+import BackgroundTasks
 
-/// Central service managing connection lifecycle, stats history, and alert evaluation.
+// MARK: - DataModule
+// Singleton data layer — not owned by any view.
+// Manages the server connection, processes incoming stats, evaluates alerts,
+// and keeps the app alive in the background via silent audio.
+// Always running: created at app launch, persists for the lifetime of the process.
 @MainActor
-final class MonitorService: ObservableObject {
+final class DataModule: ObservableObject {
+
+    static let shared = DataModule()
+
+    // MARK: - Connection State
 
     enum ConnectionState: Equatable {
         case disconnected
@@ -16,29 +25,29 @@ final class MonitorService: ObservableObject {
 
         var label: String {
             switch self {
-            case .disconnected: return "Disconnected"
-            case .connecting:   return "Connecting..."
-            case .connected:    return "Connected"
-            case .failed(let msg): return "Error: \(msg)"
+            case .disconnected:       return "Disconnected"
+            case .connecting:         return "Connecting..."
+            case .connected:          return "Connected"
+            case .failed(let msg):    return "Error: \(msg)"
             }
         }
     }
 
-    // MARK: - Published State
+    // MARK: - Published State (read by display layer)
 
-    @Published var stats: ServerStats?
-    @Published var connectionState: ConnectionState = .disconnected
-    @Published var errorMessage: String?
-    @Published var alerts: [AlertItem] = []
+    @Published private(set) var stats: ServerStats?
+    @Published private(set) var connectionState: ConnectionState = .disconnected
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var alerts: [AlertItem] = []
 
     // History buffers for charts (60 data points)
-    @Published var netRxHistory: [Double] = []
-    @Published var netTxHistory: [Double] = []
-    @Published var tempHistory: [Double] = []
+    @Published private(set) var netRxHistory: [Double] = []
+    @Published private(set) var netTxHistory: [Double] = []
+    @Published private(set) var tempHistory: [Double] = []
 
     static let historySize = 60
 
-    // MARK: - Settings
+    // MARK: - Settings (read/write by SettingsView)
 
     @Published var serverHost: String {
         didSet { UserDefaults.standard.set(serverHost, forKey: "serverHost") }
@@ -65,9 +74,17 @@ final class MonitorService: ObservableObject {
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var pathMonitor: NWPathMonitor?
 
+    private var lastAlertTimes: [String: Date] = [:]
+    private let alertCooldown: TimeInterval = 300 // 5 minutes
+    private var seenTrueNASAlerts: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(seenTrueNASAlerts), forKey: "seenTrueNASAlerts")
+        }
+    }
+
     // MARK: - Init
 
-    init() {
+    private init() {
         serverHost = UserDefaults.standard.string(forKey: "serverHost") ?? ""
         let savedPort = UserDefaults.standard.integer(forKey: "serverPort")
         serverPort = savedPort > 0 ? UInt16(savedPort) : 7337
@@ -80,14 +97,6 @@ final class MonitorService: ObservableObject {
             seenTrueNASAlerts = Set(saved)
         }
 
-        // Auto-connect on launch if a host is already configured
-        if !serverHost.isEmpty {
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                self?.connect()
-            }
-        }
-
         // When audio resumes after a phone call etc., reconnect if needed
         BackgroundAudioService.shared.onInterruptionEnded = { [weak self] in
             Task { @MainActor [weak self] in
@@ -95,8 +104,105 @@ final class MonitorService: ObservableObject {
             }
         }
 
+        setupConnectionCallbacks()
         startNetworkMonitor()
 
+        // Auto-connect on launch if a host is already configured
+        if !serverHost.isEmpty {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self?.connect()
+            }
+        }
+    }
+
+    // MARK: - Connection Management
+
+    func connect() {
+        guard !serverHost.isEmpty else {
+            errorMessage = "Enter a server address"
+            return
+        }
+        let passphrase = loadPassphrase() ?? "truemonitor"
+        shouldAutoReconnect = true
+        errorMessage = nil
+        connection.connect(host: serverHost, port: serverPort, passphrase: passphrase)
+    }
+
+    func reconnectIfNeeded() {
+        endBackgroundTask()
+        guard shouldAutoReconnect else { return }
+        switch connectionState {
+        case .connected, .connecting:
+            return
+        default:
+            reconnectTask?.cancel()
+            reconnectTask = nil
+            connect()
+        }
+    }
+
+    func beginBackgroundExecution() {
+        guard shouldAutoReconnect else { return }
+        endBackgroundTask()
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "TrueMonitor") { [weak self] in
+            self?.endBackgroundTask()
+        }
+    }
+
+    func disconnect() {
+        shouldAutoReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        endBackgroundTask()
+        connection.disconnect()
+        connectionState = .disconnected
+        BackgroundAudioService.shared.stop()
+    }
+
+    // MARK: - Background Tasks
+
+    /// Register the background processing task handler.
+    /// Must be called before the app finishes launching.
+    func registerBackgroundTask() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: "com.truemonitor.client.refresh",
+            using: nil // called on main queue
+        ) { task in
+            Task { @MainActor in
+                DataModule.shared.handleBackgroundRefresh(task as! BGProcessingTask)
+            }
+        }
+    }
+
+    /// Schedule the next background refresh 15 minutes from now.
+    func scheduleBackgroundRefresh() {
+        let request = BGProcessingTaskRequest(identifier: "com.truemonitor.client.refresh")
+        request.requiresNetworkConnectivity = true
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    private func handleBackgroundRefresh(_ task: BGProcessingTask) {
+        // Always schedule the next cycle first
+        scheduleBackgroundRefresh()
+
+        task.expirationHandler = {
+            task.setTaskCompleted(success: false)
+        }
+
+        // Connect — DataModule.evaluateAlerts() will fire notifications as needed
+        connect()
+
+        Task {
+            try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+            task.setTaskCompleted(success: true)
+        }
+    }
+
+    // MARK: - Private Helpers
+
+    private func setupConnectionCallbacks() {
         connection.onStats = { [weak self] stats in
             Task { @MainActor [weak self] in
                 self?.handleStats(stats)
@@ -114,87 +220,22 @@ final class MonitorService: ObservableObject {
         }
     }
 
-    // MARK: - Connection Management
-
-    func connect() {
-        guard !serverHost.isEmpty else {
-            errorMessage = "Enter a server address"
-            return
-        }
-
-        let passphrase = loadPassphrase() ?? "truemonitor"
-        shouldAutoReconnect = true
-        errorMessage = nil
-        connection.connect(host: serverHost, port: serverPort, passphrase: passphrase)
-    }
-
-    /// Reconnect if the user had an active session (e.g. after returning from background).
-    func reconnectIfNeeded() {
-        endBackgroundTask()
-        guard shouldAutoReconnect else { return }
-        // Only reconnect if we're not already connected/connecting
-        switch connectionState {
-        case .connected, .connecting:
-            return
-        default:
-            reconnectTask?.cancel()
-            reconnectTask = nil
-            connect()
-        }
-    }
-
-    /// Request extended background execution time to keep the connection alive briefly.
-    func beginBackgroundExecution() {
-        guard shouldAutoReconnect else { return }
-        endBackgroundTask()
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "TrueMonitor") { [weak self] in
-            // iOS is about to kill our background time — clean up
-            self?.endBackgroundTask()
-        }
-    }
-
-    private func endBackgroundTask() {
-        guard backgroundTaskID != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(backgroundTaskID)
-        backgroundTaskID = .invalid
-    }
-
-    func disconnect() {
-        shouldAutoReconnect = false
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        endBackgroundTask()
-        connection.disconnect()
-        connectionState = .disconnected
-        BackgroundAudioService.shared.stop()
-    }
-
-    // MARK: - Stats Handling
-
     private func handleStats(_ newStats: ServerStats) {
         stats = newStats
 
-        // Update history
         if let rx = newStats.netRx {
             netRxHistory.append(rx)
-            if netRxHistory.count > Self.historySize {
-                netRxHistory.removeFirst()
-            }
+            if netRxHistory.count > Self.historySize { netRxHistory.removeFirst() }
         }
         if let tx = newStats.netTx {
             netTxHistory.append(tx)
-            if netTxHistory.count > Self.historySize {
-                netTxHistory.removeFirst()
-            }
+            if netTxHistory.count > Self.historySize { netTxHistory.removeFirst() }
         }
         if let temp = newStats.cpuTemp {
             tempHistory.append(temp)
-            if tempHistory.count > Self.historySize {
-                tempHistory.removeFirst()
-            }
+            if tempHistory.count > Self.historySize { tempHistory.removeFirst() }
         }
 
-        // Evaluate alert conditions
         evaluateAlerts(newStats)
     }
 
@@ -202,7 +243,6 @@ final class MonitorService: ObservableObject {
         switch state {
         case .disconnected:
             connectionState = .disconnected
-            // Keep audio alive during reconnect so OS doesn't suspend us mid-cycle
             if shouldAutoReconnect {
                 scheduleReconnect()
             } else {
@@ -213,11 +253,9 @@ final class MonitorService: ObservableObject {
         case .connected:
             connectionState = .connected
             errorMessage = nil
-            // Play silent audio to keep the app alive when backgrounded
             BackgroundAudioService.shared.start()
         case .failed(let msg):
             connectionState = .failed(msg)
-            // Keep audio alive during reconnect so OS doesn't suspend us mid-cycle
             if shouldAutoReconnect {
                 scheduleReconnect()
             } else {
@@ -242,21 +280,17 @@ final class MonitorService: ObservableObject {
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
             guard !Task.isCancelled else { return }
-            await self?.connect()
+            self?.connect()
         }
+    }
+
+    private func endBackgroundTask() {
+        guard backgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskID)
+        backgroundTaskID = .invalid
     }
 
     // MARK: - Alert Evaluation
-
-    private var lastAlertTimes: [String: Date] = [:]
-    private let alertCooldown: TimeInterval = 300 // 5 minutes
-    /// IDs of TrueNAS alerts already shown — persisted so cleared alerts
-    /// don't re-appear when the app restarts and reconnects.
-    private var seenTrueNASAlerts: Set<String> = [] {
-        didSet {
-            UserDefaults.standard.set(Array(seenTrueNASAlerts), forKey: "seenTrueNASAlerts")
-        }
-    }
 
     private func evaluateAlerts(_ stats: ServerStats) {
         processSystemAlerts(stats.systemAlerts ?? [])
@@ -294,7 +328,6 @@ final class MonitorService: ObservableObject {
             notificationService.postAlert(item)
         }
 
-        // Detect resolved/dismissed alerts
         let resolved = seenTrueNASAlerts.subtracting(currentIDs)
         if !resolved.isEmpty {
             for alertID in resolved {
@@ -308,15 +341,11 @@ final class MonitorService: ObservableObject {
 
     private func addAlert(key: String, level: AlertLevel, message: String) {
         let now = Date()
-        if let last = lastAlertTimes[key], now.timeIntervalSince(last) < alertCooldown {
-            return
-        }
+        if let last = lastAlertTimes[key], now.timeIntervalSince(last) < alertCooldown { return }
         lastAlertTimes[key] = now
-
         let alert = AlertItem(level: level, message: message)
         alerts.insert(alert, at: 0)
         saveAlerts()
-
         notificationService.postAlert(alert)
     }
 
@@ -369,7 +398,6 @@ final class MonitorService: ObservableObject {
         if status == errSecSuccess, let data = result as? Data {
             return String(data: data, encoding: .utf8)
         }
-        // Fallback: seed from UserDefaults (used during simulator setup)
         if let seeded = UserDefaults.standard.string(forKey: "serverPassphrase") {
             savePassphrase(seeded)
             UserDefaults.standard.removeObject(forKey: "serverPassphrase")
