@@ -136,6 +136,23 @@ pip install -r requirements.txt
 | `requests` | >=2.28.0 | `truemonitor.py` only |
 | `cryptography` | >=3.4 | Both — Fernet encryption + PBKDF2 key derivation |
 
+### macOS / Apple Silicon note
+
+Newer versions of macOS block `pip install` directly to the system Python to protect OS-managed packages. If you see an error like `externally-managed-environment`, use a virtual environment instead:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 truemonitor.py
+```
+
+Next time you open a terminal, just run `source venv/bin/activate` again before launching the app. You can also activate the venv and run everything in one line:
+
+```bash
+source venv/bin/activate && python3 truemonitor.py
+```
+
 ---
 
 ## Installation
