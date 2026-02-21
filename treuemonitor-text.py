@@ -689,11 +689,11 @@ class AppState:
                 if not self._temp_alert_active:
                     self._temp_alert_active = True
                     self.add_alert("critical",
-                                   f"CPU temp {temp}°C exceeds threshold {temp_threshold}°C!")
+                                   f"CPU temperature is {temp}°C (above {temp_threshold}°C threshold)!")
             else:
                 if self._temp_alert_active:
                     self._temp_alert_active = False
-                    self.add_alert("resolved", f"CPU temp back to normal: {temp}°C")
+                    self.add_alert("resolved", f"CPU temperature back to normal: {temp}°C")
 
         cpu = stats.get("cpu_percent")
         if cpu is not None:
@@ -728,6 +728,42 @@ class AppState:
         for aid in self._seen_truenas_alerts - current_ids:
             self._seen_truenas_alerts.discard(aid)
             self.add_alert("resolved", "[TrueNAS] Alert cleared")
+
+    def load_alert_history(self):
+        """Load persisted alerts from alerts.log into the in-memory deque."""
+        if not os.path.exists(ALERT_LOG):
+            return
+        try:
+            with open(ALERT_LOG) as f:
+                lines = f.readlines()
+            sev_map = {"CRITICAL": "critical", "WARNING": "warning",
+                       "INFO": "info", "RESOLVED": "resolved"}
+            entries = []
+            for line in lines:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                # Parse "[YYYY-MM-DD HH:MM:SS] PREFIX: message"
+                entry = {"raw": line}
+                if line.startswith("["):
+                    bracket_end = line.find("] ")
+                    if bracket_end > 0:
+                        ts_str = line[1:bracket_end]
+                        rest   = line[bracket_end + 2:]
+                        colon  = rest.find(": ")
+                        if colon > 0:
+                            prefix = rest[:colon]
+                            msg    = rest[colon + 2:]
+                            sev    = sev_map.get(prefix)
+                            if sev:
+                                entry = {"time": ts_str, "severity": sev,
+                                         "message": msg}
+                entries.append(entry)
+            with self.lock:
+                for e in entries:
+                    self.alerts.append(e)
+        except Exception:
+            pass
 
     def clear_alerts(self):
         with self.lock:
@@ -1621,6 +1657,7 @@ def main():
         client = TrueNASClient(host=config.get("host", "localhost"))
 
     state      = AppState()
+    state.load_alert_history()
 
     # Auto-start broadcast server if it was enabled in the saved config
     if config.get("broadcast_enabled"):
