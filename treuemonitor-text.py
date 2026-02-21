@@ -1596,6 +1596,14 @@ def main():
         client = TrueNASClient(host=config.get("host", "localhost"))
 
     state      = AppState()
+
+    # Auto-start broadcast server if it was enabled in the saved config
+    if config.get("broadcast_enabled"):
+        state.start_broadcast(
+            config.get("broadcast_port", BROADCAST_DEFAULT_PORT),
+            config.get("broadcast_key", BROADCAST_DEFAULT_KEY),
+        )
+
     stop_event = threading.Event()
 
     poll_thread = threading.Thread(

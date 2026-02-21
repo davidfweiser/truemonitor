@@ -740,7 +740,8 @@ class TrueNASClient:
                 for alert in alerts:
                     if not isinstance(alert, dict):
                         continue
-                    alert_id = alert.get("uuid") or alert.get("id") or str(alert)
+                    alert_id = (alert.get("uuid") or alert.get("id") or
+                                alert.get("klass", "") + ":" + alert.get("level", ""))
                     level = alert.get("level", "INFO").upper()
                     if level in ("CRITICAL", "ERROR"):
                         severity = "critical"
@@ -1956,16 +1957,16 @@ class TrueMonitorApp:
         bf.grid(row=16, column=0, columnspan=2, pady=26, sticky="w")
 
         self.conn_btn = tk.Button(
-            bf, text="Save & Connect", bg=COLORS["button"],
-            fg=COLORS["text"], activebackground=COLORS["button_hover"],
-            activeforeground=COLORS["text"], font=("Helvetica", self._sf(11), "bold"),
+            bf, text="Save & Connect", bg="#ffffff",
+            fg="#000000", activebackground="#e0e0e0",
+            activeforeground="#000000", font=("Helvetica", self._sf(11), "bold"),
             relief="flat", padx=22, pady=8, command=self._on_save,
         )
         self.conn_btn.pack(side=tk.LEFT, padx=(0, 14))
 
         self.disc_btn = tk.Button(
-            bf, text="Disconnect", bg=COLORS["critical"], fg=COLORS["text"],
-            activebackground="#d32f2f", activeforeground=COLORS["text"],
+            bf, text="Disconnect", bg="#ffffff", fg="#000000",
+            activebackground="#e0e0e0", activeforeground="#000000",
             font=("Helvetica", self._sf(11)), relief="flat", padx=22, pady=8,
             command=self._disconnect, state=tk.DISABLED,
         )
