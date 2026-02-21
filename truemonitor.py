@@ -2057,20 +2057,20 @@ class TrueMonitorApp:
 
         Rules:
         - "Connection from X" (raw TCP) is skipped — too noisy on reconnects.
-        - "Authenticated from X" is shown once per IP per 5 minutes so the
-          first login appears in the log without spamming on rapid reconnects.
-        - warning events (wrong key / backoff) always shown.
+        - All other events (authenticated, wrong key) are shown at most once
+          per IP per level per 5 minutes so a sleeping phone reconnecting
+          repeatedly doesn't flood the alert log.
         """
-        if level == "info":
-            # Only show successful auth events, not bare TCP connections
-            if not message.startswith("Authenticated"):
-                return
-            # Per-IP cooldown: skip if same IP authenticated recently
-            now = datetime.now()
-            last = self._connect_alert_times.get(ip)
-            if last and (now - last).total_seconds() < 300:  # 5-minute cooldown
-                return
-            self._connect_alert_times[ip] = now
+        if level == "info" and not message.startswith("Authenticated"):
+            return
+
+        # Per-IP, per-level cooldown (5 minutes)
+        now = datetime.now()
+        key = f"{ip}:{level}"
+        last = self._connect_alert_times.get(key)
+        if last and (now - last).total_seconds() < 300:
+            return
+        self._connect_alert_times[key] = now
 
         self.root.after(0, lambda: self._add_alert(level, message, popup=False, sound=False))
 
