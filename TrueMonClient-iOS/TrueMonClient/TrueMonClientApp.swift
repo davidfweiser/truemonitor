@@ -41,9 +41,8 @@ struct TrueMonClientApp: App {
     @StateObject private var display = DisplayModule()
 
     init() {
-        NotificationService().requestPermission()
         // Initialize DataModule.shared early so background task handlers are
-        // registered before the first scene renders.
+        // registered and notification permission is requested before the first scene renders.
         DataModule.shared.registerBackgroundTask()
     }
 

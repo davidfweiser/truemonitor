@@ -2,9 +2,10 @@ import Foundation
 import UserNotifications
 
 /// Handles local notification permissions and posting alerts.
-final class NotificationService {
+final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     func requestPermission() {
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge]
         ) { _, _ in }
@@ -31,5 +32,14 @@ final class NotificationService {
         )
 
         UNUserNotificationCenter.current().add(request)
+    }
+
+    // Show banner + play sound even when the app is in the foreground
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }

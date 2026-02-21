@@ -31,6 +31,7 @@ struct DriveMapSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.cardBorder)
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)

@@ -101,6 +101,15 @@ All data sent over the network is encrypted using **Fernet symmetric encryption*
 [4 bytes: big-endian payload length] [Fernet-encrypted JSON]
 ```
 
+### Auth Handshake
+
+Before receiving data, clients must pass a challenge-response handshake:
+
+1. Server sends 13-byte magic: `TRUEMON_AUTH\n`
+2. Server sends 32-byte random challenge
+3. Client replies with `HMAC-SHA256(rawKey, challenge)`
+4. Server closes the connection immediately on a wrong key, or starts streaming frames on success
+
 ### Settings
 
 | Setting | Default | Description |
@@ -200,16 +209,20 @@ A native iPhone app that connects to TrueMonitor's broadcast server and displays
 - **Drive Map** — Vdev topology sheet per pool showing disk health
 - **Alerts tab** — Color-coded alert list (info/warning/critical) with timestamps, including TrueNAS system alerts forwarded from the server
 - **Settings tab** — Server host/port/key, alert thresholds, connect/disconnect button
-- **iOS 26 Liquid Glass** — Glass cards, floating tab bar, deep gradient background
-- **Background monitoring** — BGProcessingTask for periodic checks when app is backgrounded
-- **Local notifications** — Push alerts when thresholds are exceeded
+- **Hamburger menu navigation** — Floating glass menu button with animated drawer, replacing the system tab bar so content fills the full screen
+- **iOS 26 Liquid Glass** — Glass cards and panels using the native `.glassEffect()` API on iOS 26, with graceful fallback on earlier versions
+- **Always-on background monitoring** — Silent audio loop keeps the TCP connection alive while the screen is off; BGProcessingTask fires every 15 minutes as a safety net
+- **TCP keepalive** — Connection probes every 10 seconds so dead connections are detected quickly without waiting for a timeout
+- **Data watchdog** — If no stats arrive for 30 seconds while connected, the app forces a reconnect
+- **Auto-reconnect** — NWPathMonitor detects network recovery and reconnects immediately; 5-second retry loop on disconnect or failure
+- **Local notifications** — Push alerts when thresholds are exceeded, even in the background
 - **Keychain storage** — Passphrase stored securely in the iOS Keychain
 
 ### Requirements
 
 - iOS 16.0+
 - Xcode 16+
-- No third-party dependencies — all crypto via CommonCrypto + CryptoKit
+- No third-party dependencies — all crypto via CommonCrypto
 
 ### Build
 
@@ -222,21 +235,23 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 ### truemonitor.py
 
 - **TrueNASClient** - REST API client: authentication, endpoint auto-detection, format caching, data parsing for CPU, memory, network, temperature, pools, and system alerts
-- **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll
+- **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
 - **TrueMonitorApp** - tkinter GUI with threaded background polling and thread-safe UI updates via `root.after()`
 
 ### truemonclient.py
 
-- **MonitorClient** - TCP client that connects to TrueMonitor's broadcast server, decrypts incoming packets, and feeds data to the UI. Auto-reconnects on disconnect.
-- **TrueMonClientApp** - Identical tkinter GUI to TrueMonitorApp, driven by received data instead of direct API polling
+- **MonitorClient** - TCP client that connects to TrueMonitor's broadcast server, performs HMAC auth handshake, decrypts incoming packets, and feeds data to the UI. Auto-reconnects on disconnect.
+- **TrueMonClientApp** - tkinter GUI driven by received data instead of direct API polling
 
 ### TrueMonClient iOS
 
 - **KeyDerivation** - PBKDF2-HMAC-SHA256 wrapper via CommonCrypto (100k iterations, constant salt)
 - **FernetDecryptor** - Fernet token decryption: base64url decode → HMAC-SHA256 verify → AES-128-CBC decrypt
-- **MonitorConnection** - NWConnection TCP client with 4-byte length-prefix framing and async callbacks
-- **MonitorService** - `@MainActor ObservableObject` managing connection lifecycle, reconnect, 60-point history buffers, alert evaluation, Keychain passphrase storage
-- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live graphs
+- **MonitorConnection** - NWConnection TCP client with TCP keepalive, 4-byte length-prefix framing, HMAC auth handshake, and async callbacks
+- **DataModule** - `@MainActor` singleton managing connection lifecycle, data watchdog, auto-reconnect, 60-point history buffers, alert evaluation, and Keychain passphrase storage
+- **DisplayModule** - UI-only state (selected view, scene lifecycle hooks); sleeps when screen is off while DataModule keeps running
+- **BackgroundAudioService** - Silent audio loop (AVAudioSession `.playback`) that prevents iOS from suspending the app when the screen is off
+- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live graphs; glass hamburger menu for navigation
 
 ---
 

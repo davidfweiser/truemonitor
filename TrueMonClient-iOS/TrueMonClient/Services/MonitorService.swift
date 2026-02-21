@@ -78,11 +78,9 @@ final class DataModule: ObservableObject {
 
     private var lastAlertTimes: [String: Date] = [:]
     private let alertCooldown: TimeInterval = 300 // 5 minutes
-    private var seenTrueNASAlerts: Set<String> = [] {
-        didSet {
-            UserDefaults.standard.set(Array(seenTrueNASAlerts), forKey: "seenTrueNASAlerts")
-        }
-    }
+    // In-memory only — deduplicates within a session but resets on app restart
+    // so persistent TrueNAS alerts (stable IDs) are shown again each launch.
+    private var seenTrueNASAlerts: Set<String> = []
 
     // MARK: - Init
 
@@ -95,9 +93,12 @@ final class DataModule: ObservableObject {
         memoryAlertEnabled = UserDefaults.standard.object(forKey: "memoryAlertEnabled") as? Bool ?? true
 
         loadAlerts()
-        if let saved = UserDefaults.standard.stringArray(forKey: "seenTrueNASAlerts") {
-            seenTrueNASAlerts = Set(saved)
-        }
+        // Clear any stale persisted seenTrueNASAlerts from old versions
+        UserDefaults.standard.removeObject(forKey: "seenTrueNASAlerts")
+
+        // Register this instance as UNUserNotificationCenterDelegate before any
+        // notifications fire, and request permission.
+        notificationService.requestPermission()
 
         // When audio resumes after a phone call etc., reconnect if needed
         BackgroundAudioService.shared.onInterruptionEnded = { [weak self] in

@@ -1291,9 +1291,9 @@ class TrueMonitorApp:
                 side=tk.LEFT)
             topo = pool.get("topology", {})
             map_btn = tk.Button(
-                title_row, text="Drive Map", bg=COLORS["card_border"],
-                fg=COLORS["text"], activebackground=COLORS["button"],
-                activeforeground=COLORS["text"],
+                title_row, text="Drive Map", bg=COLORS["button"],
+                fg="#ffffff", activebackground=COLORS["button_hover"],
+                activeforeground="#ffffff",
                 font=("Helvetica", self._sf(8)), relief="flat", padx=8, pady=2,
                 command=lambda n=name, t=topo: self._show_drive_map(n, t),
             )
@@ -1506,9 +1506,9 @@ class TrueMonitorApp:
 
         # Close button
         tk.Button(
-            win, text="Close", bg=COLORS["card"], fg=COLORS["text"],
-            activebackground=COLORS["card_border"],
-            activeforeground=COLORS["text"],
+            win, text="Close", bg=COLORS["button"], fg="#ffffff",
+            activebackground=COLORS["button_hover"],
+            activeforeground="#ffffff",
             font=("Helvetica", self._sf(10)), relief="flat", padx=20, pady=6,
             command=win.destroy,
         ).pack(pady=(0, 12))

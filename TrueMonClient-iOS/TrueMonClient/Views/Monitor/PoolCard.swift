@@ -57,7 +57,7 @@ struct PoolCard: View {
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)
-                .tint(AppTheme.accent)
+                .tint(AppTheme.cardBorder)
                 .padding(.top, 4)
                 .sheet(isPresented: $showDriveMap) {
                     DriveMapSheet(poolName: pool.name, topology: pool.topology ?? [:])
