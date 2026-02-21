@@ -170,6 +170,7 @@ final class MonitorConnection {
 
             if let error = error {
                 self.onError?(error.localizedDescription)
+                self.onStateChange?(.failed(error.localizedDescription))
                 return
             }
             if isComplete && (data == nil || data!.isEmpty) {
@@ -200,6 +201,7 @@ final class MonitorConnection {
 
             if let error = error {
                 self.onError?(error.localizedDescription)
+                self.onStateChange?(.failed(error.localizedDescription))
                 return
             }
             if isComplete && (data == nil || data!.isEmpty) {
