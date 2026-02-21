@@ -11,9 +11,8 @@ struct ContentView: View {
             AppTheme.backgroundGradient
                 .ignoresSafeArea()
 
-            // Active tab content — fills the full screen including safe areas
+            // Active tab content
             activeView
-                .ignoresSafeArea()
                 .id(display.selectedTab)
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.18), value: display.selectedTab)
