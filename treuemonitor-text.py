@@ -794,6 +794,8 @@ def draw_header(win, state, config, title=""):
         ts   = state.last_updated.strftime("%H:%M:%S")
         iv   = config.get("interval", 5)
         row2 = f" Updated: {ts}  |  Poll: {iv}s"
+        if state.broadcast_server is not None:
+            row2 += f"  |  Broadcast: {state.broadcast_server.client_count} client(s)"
         if state.last_error:
             row2 += f"  |  Error: {state.last_error[:50]}"
         put(win, 2, 0, row2, curses.color_pair(C_DIM) | curses.A_DIM)
