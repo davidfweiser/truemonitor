@@ -9,7 +9,6 @@ Usage:
     python3 treuemonitor-text.py
     python3 treuemonitor-text.py --host 192.168.1.100 --api-key YOUR_KEY
     python3 treuemonitor-text.py --host 192.168.1.100 --username admin --password secret
-    python3 treuemonitor-text.py --interval 10 --temp-threshold 75
 
 Keys — Main Menu:
     1    Settings
@@ -17,12 +16,21 @@ Keys — Main Menu:
     3    Monitor
     4    Quit
 
-Keys — Any view:
-    ESC  Return to main menu
+Keys — Settings:
+    Tab / Down   Next field
+    Shift+Tab / Up   Previous field
+    Enter        Next field (or Save & Connect on last item)
+    Backspace    Delete character
+    Left / Right Move cursor in field
+    S            Save & Connect (from anywhere in the form)
+    ESC          Cancel, back to menu
 
-Keys — Alerts view:
-    ESC  Return to main menu
-    C    Clear all alerts
+Keys — Alerts:
+    ESC          Back to menu
+    C            Clear all alerts
+
+Keys — Monitor / any view:
+    ESC          Back to menu
 """
 
 import curses
@@ -60,7 +68,7 @@ ALERT_LOG   = os.path.join(CONFIG_DIR, "alerts.log")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Crypto helpers (shared with truemonitor.py)
 # ---------------------------------------------------------------------------
 
 def debug(msg):
@@ -80,6 +88,13 @@ def _get_encryption_key():
     return base64.urlsafe_b64encode(key_bytes)
 
 
+def _encrypt(plaintext):
+    if not plaintext:
+        return ""
+    f = Fernet(_get_encryption_key())
+    return f.encrypt(plaintext.encode()).decode()
+
+
 def _decrypt(ciphertext):
     if not ciphertext:
         return ""
@@ -89,6 +104,36 @@ def _decrypt(ciphertext):
     except (InvalidToken, Exception):
         return ciphertext
 
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE) as f:
+                data = json.load(f)
+            for key in ("password", "api_key"):
+                if data.get(f"{key}_encrypted") and data.get(key):
+                    data[key] = _decrypt(data[key])
+                    data.pop(f"{key}_encrypted", None)
+            return data
+        except Exception:
+            pass
+    return {}
+
+
+def save_config(config):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    save_data = dict(config)
+    for key in ("password", "api_key"):
+        if save_data.get(key):
+            save_data[key] = _encrypt(save_data[key])
+            save_data[f"{key}_encrypted"] = True
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(save_data, f, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
 
 def format_bytes(val, per_second=False):
     if val is None:
@@ -202,9 +247,8 @@ class TrueNASClient:
 
         if self._working_report_format is not None:
             idx = self._working_report_format
-            attempts = _attempts()
             try:
-                ep, pl = attempts[idx]
+                ep, pl = _attempts()[idx]
                 return self._post(ep, pl)
             except Exception:
                 self._working_report_format = None
@@ -241,8 +285,7 @@ class TrueNASClient:
         try:
             graphs = [{"name": "cpu"}, {"name": "memory"}, {"name": "cputemp"}]
             report = self.get_reporting_data(graphs)
-            items  = report if isinstance(report, list) else []
-            for item in items:
+            for item in (report if isinstance(report, list) else []):
                 if not isinstance(item, dict):
                     continue
                 name   = item.get("name", "")
@@ -311,7 +354,8 @@ class TrueNASClient:
             else:
                 interfaces  = self.get_interfaces()
                 iface_names = [i.get("name", "") for i in interfaces
-                               if isinstance(i, dict) and i.get("name", "") not in ("lo", "")]
+                               if isinstance(i, dict)
+                               and i.get("name", "") not in ("lo", "")]
             for iface_name in iface_names:
                 try:
                     net_report = self.get_reporting_data(
@@ -351,8 +395,7 @@ class TrueNASClient:
 
         stats["pools"] = []
         try:
-            pools = self.get_pools()
-            for p in pools:
+            for p in self.get_pools():
                 if not isinstance(p, dict):
                     continue
                 topology  = p.get("topology", {})
@@ -364,21 +407,20 @@ class TrueNASClient:
                     for vdev in topology.get(topo_key, []):
                         if not isinstance(vdev, dict):
                             continue
-                        children = vdev.get("children", [])
-                        members  = children if children else [vdev]
+                        members = vdev.get("children", []) or [vdev]
                         for member in members:
                             if not isinstance(member, dict):
                                 continue
                             disk_name = member.get("disk") or member.get("name", "")
                             if not disk_name:
                                 continue
-                            m_stats   = member.get("stats", {})
-                            errs      = ((m_stats.get("read_errors", 0) or 0)
-                                         + (m_stats.get("write_errors", 0) or 0)
-                                         + (m_stats.get("checksum_errors", 0) or 0))
-                            status    = member.get("status", "ONLINE")
-                            has_error = errs > 0 or status not in ("ONLINE", "")
-                            disks.append({"name": disk_name, "has_error": has_error})
+                            m   = member.get("stats", {})
+                            err = ((m.get("read_errors", 0) or 0)
+                                   + (m.get("write_errors", 0) or 0)
+                                   + (m.get("checksum_errors", 0) or 0))
+                            st  = member.get("status", "ONLINE")
+                            disks.append({"name": disk_name,
+                                          "has_error": err > 0 or st not in ("ONLINE", "")})
                 if total and allocated is not None:
                     pct = round(allocated / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
@@ -394,21 +436,17 @@ class TrueNASClient:
 
         stats["system_alerts"] = []
         try:
-            alerts = self.get_alerts()
-            if isinstance(alerts, list):
-                for alert in alerts:
-                    if not isinstance(alert, dict):
-                        continue
-                    alert_id = alert.get("uuid") or alert.get("id") or str(alert)
-                    level    = alert.get("level", "INFO").upper()
-                    severity = ("critical" if level in ("CRITICAL", "ERROR")
-                                else "warning" if level == "WARNING" else "info")
-                    msg = alert.get("formatted", "") or alert.get("text", "")
-                    if not msg:
-                        msg = alert.get("klass", "") or "Unknown TrueNAS alert"
-                    stats["system_alerts"].append({
-                        "id": alert_id, "severity": severity, "message": msg,
-                    })
+            for alert in self.get_alerts():
+                if not isinstance(alert, dict):
+                    continue
+                aid   = alert.get("uuid") or alert.get("id") or str(alert)
+                level = alert.get("level", "INFO").upper()
+                sev   = ("critical" if level in ("CRITICAL", "ERROR")
+                          else "warning" if level == "WARNING" else "info")
+                msg   = alert.get("formatted", "") or alert.get("text", "")
+                if not msg:
+                    msg = alert.get("klass", "") or "Unknown TrueNAS alert"
+                stats["system_alerts"].append({"id": aid, "severity": sev, "message": msg})
         except Exception as e:
             debug(f" system alerts error: {e}")
 
@@ -426,7 +464,6 @@ class AppState:
         self.alerts  = deque(maxlen=200)
         self.last_updated = None
         self.last_error   = None
-        # views: "menu" | "settings" | "alerts" | "monitor"
         self.current_view  = "menu"
         self.unread_alerts = 0
         self._temp_alert_active = False
@@ -512,13 +549,13 @@ class AppState:
 # Curses color pairs
 # ---------------------------------------------------------------------------
 
-C_ACCENT  = 1   # cyan
-C_GOOD    = 2   # green
-C_WARN    = 3   # yellow
-C_CRIT    = 4   # red
-C_DIM     = 5   # white (use with A_DIM)
-C_SEL     = 6   # black on cyan  (highlighted menu item)
-C_BADGE   = 7   # white on red   (unread alert badge)
+C_ACCENT = 1   # cyan
+C_GOOD   = 2   # green
+C_WARN   = 3   # yellow
+C_CRIT   = 4   # red
+C_DIM    = 5   # white (use with A_DIM)
+C_SEL    = 6   # black on cyan  (focused field / selected item)
+C_BADGE  = 7   # white on red   (unread alert badge)
 
 
 def init_colors():
@@ -534,7 +571,7 @@ def init_colors():
 
 
 # ---------------------------------------------------------------------------
-# Drawing utilities
+# Drawing primitives
 # ---------------------------------------------------------------------------
 
 def put(win, y, x, text, attr=0):
@@ -559,56 +596,39 @@ def hline(win, y, attr=0):
             pass
 
 
-def fill_row(win, y, attr=0):
-    """Fill an entire row with spaces (used for highlighted rows)."""
-    my, mx = win.getmaxyx()
-    if 0 <= y < my:
-        try:
-            win.addstr(y, 0, " " * (mx - 1), attr)
-        except curses.error:
-            pass
-
-
 # ---------------------------------------------------------------------------
-# Common header drawn at the top of every screen (rows 0-3)
+# Common header (rows 0-3)
 # ---------------------------------------------------------------------------
 
-HEADER_ROWS = 4   # rows consumed by the header
-CONTENT_ROW = HEADER_ROWS  # first row available for content
+CONTENT_ROW = 4
 
 
 def draw_header(win, state, config, title=""):
     my, mx = win.getmaxyx()
-
-    # Row 0 — app name + current screen
-    app_str  = f" TrueMonitor v{APP_VERSION}"
+    app_str = f" TrueMonitor v{APP_VERSION}"
     if title:
         app_str += f"  \u2014  {title}"
     put(win, 0, 0, app_str, curses.color_pair(C_ACCENT) | curses.A_BOLD)
 
-    # Row 1 — server / connection info
     s = state.stats
     if s:
-        host   = s.get("hostname", "N/A")
-        ver    = s.get("version",  "N/A")
-        uptime = s.get("uptime",   "N/A")
-        info   = f" {host}  |  {ver}  |  Uptime: {uptime}"
+        info = (f" {s.get('hostname','N/A')}  |  {s.get('version','N/A')}"
+                f"  |  Uptime: {s.get('uptime','N/A')}")
     else:
         info = f" {config.get('host', '?')}  —  connecting..."
     put(win, 1, 0, info, curses.color_pair(C_DIM) | curses.A_DIM)
 
-    # Row 2 — poll timestamp / error
     if state.last_updated:
-        ts  = state.last_updated.strftime("%H:%M:%S")
-        iv  = config.get("interval", 5)
+        ts   = state.last_updated.strftime("%H:%M:%S")
+        iv   = config.get("interval", 5)
         row2 = f" Updated: {ts}  |  Poll: {iv}s"
         if state.last_error:
             row2 += f"  |  Error: {state.last_error[:50]}"
         put(win, 2, 0, row2, curses.color_pair(C_DIM) | curses.A_DIM)
     else:
-        put(win, 2, 0, " Waiting for first poll...", curses.color_pair(C_DIM) | curses.A_DIM)
+        put(win, 2, 0, " Waiting for first poll...",
+            curses.color_pair(C_DIM) | curses.A_DIM)
 
-    # Row 3 — separator
     hline(win, 3, curses.color_pair(C_DIM) | curses.A_DIM)
 
 
@@ -625,164 +645,323 @@ def draw_hint(win, text, attr=None):
 
 
 # ---------------------------------------------------------------------------
-# MENU view  (view = "menu")
+# MENU view
 # ---------------------------------------------------------------------------
 
 MENU_ITEMS = [
-    ("1", "Settings",  "settings"),
-    ("2", "Alerts",    "alerts"),
-    ("3", "Monitor",   "monitor"),
-    ("4", "Quit",      "quit"),
+    ("1", "Settings", "settings"),
+    ("2", "Alerts",   "alerts"),
+    ("3", "Monitor",  "monitor"),
+    ("4", "Quit",     "quit"),
 ]
 
 
 def draw_menu(win, state):
     my, mx = win.getmaxyx()
-
-    # Quick stats summary line if data is available
     row = CONTENT_ROW + 1
-    s   = state.stats
-    if s:
-        cpu    = s.get("cpu_percent")
-        mp     = s.get("memory_percent")
-        temp   = s.get("cpu_temp")
-        cpu_s  = f"{cpu:.1f}%" if cpu is not None else "N/A"
-        mem_s  = f"{mp:.1f}%"  if mp  is not None else "N/A"
-        tmp_s  = f"{temp:.1f}\u00b0C" if temp is not None else "N/A"
-        summary = f" CPU {cpu_s}   Mem {mem_s}   Temp {tmp_s}"
 
-        def _c(v, hi, lo):
+    # Quick stats bar
+    s = state.stats
+    if s:
+        cpu  = s.get("cpu_percent")
+        mp   = s.get("memory_percent")
+        temp = s.get("cpu_temp")
+
+        def _ca(v, hi, lo):
             if v is None:
                 return curses.color_pair(C_DIM)
             return (curses.color_pair(C_CRIT) if v >= hi
                     else curses.color_pair(C_WARN) if v >= lo
                     else curses.color_pair(C_GOOD))
 
-        put(win, row, 0, f" CPU  ", curses.color_pair(C_DIM))
-        put(win, row, 6, f"{cpu_s:<8}", _c(cpu, 90, 70))
-        put(win, row, 14, "Mem  ", curses.color_pair(C_DIM))
-        put(win, row, 19, f"{mem_s:<8}", _c(mp, 90, 70))
-        put(win, row, 27, "Temp  ", curses.color_pair(C_DIM))
-        put(win, row, 33, tmp_s, _c(temp, 80, 60))
-        row += 2
-    else:
-        row += 2
+        put(win, row, 1, "CPU ", curses.color_pair(C_DIM))
+        put(win, row, 5, f"{cpu:.1f}%" if cpu is not None else "N/A", _ca(cpu, 90, 70))
+        put(win, row, 13, "Mem ", curses.color_pair(C_DIM))
+        put(win, row, 17, f"{mp:.1f}%" if mp is not None else "N/A", _ca(mp, 90, 70))
+        put(win, row, 25, "Temp ", curses.color_pair(C_DIM))
+        put(win, row, 30,
+            f"{temp:.1f}\u00b0C" if temp is not None else "N/A",
+            _ca(temp, 80, 60))
+    row += 2
 
     # Menu box
-    box_w = 36
+    box_w = 40
     box_x = max(2, (mx - box_w) // 2)
+    acc   = curses.color_pair(C_ACCENT)
 
-    put(win, row, box_x, "\u250c" + "\u2500" * (box_w - 2) + "\u2510",
-        curses.color_pair(C_ACCENT))
+    put(win, row, box_x,
+        "\u250c" + "\u2500" * (box_w - 2) + "\u2510", acc)
     row += 1
-    put(win, row, box_x, "\u2502" + " Select an option ".center(box_w - 2) + "\u2502",
-        curses.color_pair(C_ACCENT))
+    put(win, row, box_x,
+        "\u2502" + " Select an option ".center(box_w - 2) + "\u2502", acc)
     row += 1
-    put(win, row, box_x, "\u251c" + "\u2500" * (box_w - 2) + "\u2524",
-        curses.color_pair(C_ACCENT))
+    put(win, row, box_x,
+        "\u251c" + "\u2500" * (box_w - 2) + "\u2524", acc)
     row += 1
 
     for key, label, view in MENU_ITEMS:
         if row >= my - 3:
             break
-        # Annotate Alerts with unread count
-        display_label = label
+
+        disp = label
         if view == "alerts":
             count  = len(state.alerts)
             unread = state.unread_alerts
-            display_label = f"Alerts  ({count} total"
-            if unread > 0:
-                display_label += f", {unread} new"
-            display_label += ")"
+            disp   = f"Alerts  ({count} total"
+            disp  += f", {unread} new" if unread > 0 else ""
+            disp  += ")"
 
-        line = f"  {key}.  {display_label}"
-        pad  = box_w - 2 - len(line)
-        line = line + " " * max(0, pad)
+        put(win, row, box_x, "\u2502", acc)
+        put(win, row, box_x + box_w - 1, "\u2502", acc)
 
-        put(win, row, box_x, "\u2502", curses.color_pair(C_ACCENT))
-        put(win, row, box_x + 1, f"  ", 0)
-        put(win, row, box_x + 3, f"{key}.", curses.color_pair(C_SEL) | curses.A_BOLD)
-
-        if view == "alerts" and state.unread_alerts > 0:
-            put(win, row, box_x + 6, f"  {display_label}",
-                curses.color_pair(C_BADGE) | curses.A_BOLD)
-        elif view == "quit":
-            put(win, row, box_x + 6, f"  {display_label}",
-                curses.color_pair(C_CRIT))
+        key_attr = curses.color_pair(C_SEL) | curses.A_BOLD
+        if view == "quit":
+            lbl_attr = curses.color_pair(C_CRIT)
+        elif view == "alerts" and state.unread_alerts > 0:
+            lbl_attr = curses.color_pair(C_BADGE) | curses.A_BOLD
         else:
-            put(win, row, box_x + 6, f"  {display_label}", 0)
+            lbl_attr = 0
 
-        put(win, row, box_x + box_w - 1, "\u2502", curses.color_pair(C_ACCENT))
+        put(win, row, box_x + 3, f"{key}.", key_attr)
+        put(win, row, box_x + 7, f" {disp}", lbl_attr)
         row += 1
 
-    put(win, row, box_x, "\u2514" + "\u2500" * (box_w - 2) + "\u2518",
-        curses.color_pair(C_ACCENT))
+    put(win, row, box_x,
+        "\u2514" + "\u2500" * (box_w - 2) + "\u2518", acc)
 
     draw_hint(win, "Press a number key to select")
 
 
 # ---------------------------------------------------------------------------
-# SETTINGS view  (view = "settings")
+# SETTINGS form
 # ---------------------------------------------------------------------------
 
-def draw_settings(win, state, config):
+# Field definitions — order matters (Tab moves down the list)
+_FIELDS = [
+    {"key": "host",           "label": "Host / IP",         "secret": False},
+    {"key": "api_key",        "label": "API Key",            "secret": True},
+    {"key": "username",       "label": "Username",           "secret": False},
+    {"key": "password",       "label": "Password",           "secret": True},
+    {"key": "interval",       "label": "Poll Interval (s)",  "secret": False},
+    {"key": "temp_threshold", "label": "Temp Threshold (°C)","secret": False},
+]
+_SAVE_IDX = len(_FIELDS)   # index after last field = Save button
+
+
+class SettingsForm:
+    """Holds editable state for the settings form."""
+
+    def __init__(self, config):
+        self.values = {
+            "host":           config.get("host",           ""),
+            "api_key":        config.get("api_key",        ""),
+            "username":       config.get("username",       ""),
+            "password":       config.get("password",       ""),
+            "interval":       str(config.get("interval",       5)),
+            "temp_threshold": str(config.get("temp_threshold", 82)),
+        }
+        # Cursor position (index into value string) for each field
+        self.cursors = {k: len(str(v)) for k, v in self.values.items()}
+        self.focused = 0          # 0..len(_FIELDS)-1 = field, _SAVE_IDX = button
+        self.show_secrets = {"api_key": False, "password": False}
+        self.status   = ""        # shown after save attempt
+        self.status_ok = True
+
+    def get_config(self):
+        try:
+            iv = max(2, int(self.values.get("interval", "5") or "5"))
+        except ValueError:
+            iv = 5
+        try:
+            tt = int(self.values.get("temp_threshold", "82") or "82")
+            tt = max(40, min(96, tt))
+        except ValueError:
+            tt = 82
+        return {
+            "host":           self.values["host"].strip(),
+            "api_key":        self.values["api_key"].strip(),
+            "username":       self.values["username"].strip(),
+            "password":       self.values["password"],
+            "interval":       iv,
+            "temp_threshold": tt,
+        }
+
+    def _total(self):
+        return _SAVE_IDX + 1  # fields + save button
+
+    def handle_key(self, key):
+        """
+        Process one keypress.
+        Returns True if Save & Connect was requested.
+        """
+        total = self._total()
+
+        if self.focused == _SAVE_IDX:
+            if key in (curses.KEY_ENTER, 10, 13):
+                return True
+            elif key in (curses.KEY_UP, curses.KEY_BTAB):
+                self.focused = _SAVE_IDX - 1
+            elif key in (curses.KEY_DOWN, 9):
+                self.focused = 0
+            return False
+
+        # On a text field
+        fld = _FIELDS[self.focused]
+        k   = fld["key"]
+        val = self.values[k]
+        cur = self.cursors[k]
+
+        if key in (curses.KEY_DOWN, 9, curses.KEY_ENTER, 10, 13):
+            self.focused = (self.focused + 1) % total
+        elif key in (curses.KEY_UP, curses.KEY_BTAB):
+            self.focused = (self.focused - 1) % total
+        elif key == curses.KEY_LEFT:
+            self.cursors[k] = max(0, cur - 1)
+        elif key == curses.KEY_RIGHT:
+            self.cursors[k] = min(len(val), cur + 1)
+        elif key == curses.KEY_HOME:
+            self.cursors[k] = 0
+        elif key == curses.KEY_END:
+            self.cursors[k] = len(val)
+        elif key in (curses.KEY_BACKSPACE, 127, 8):
+            if cur > 0:
+                self.values[k]  = val[:cur - 1] + val[cur:]
+                self.cursors[k] = cur - 1
+        elif key == curses.KEY_DC:
+            if cur < len(val):
+                self.values[k] = val[:cur] + val[cur + 1:]
+        elif 32 <= key <= 126:   # printable ASCII
+            self.values[k]  = val[:cur] + chr(key) + val[cur:]
+            self.cursors[k] = cur + 1
+
+        return False
+
+
+def draw_settings(win, state, config, form):
     my, mx = win.getmaxyx()
-    row = CONTENT_ROW + 1
+    acc    = curses.color_pair(C_ACCENT)
+    dim    = curses.color_pair(C_DIM) | curses.A_DIM
+    sel    = curses.color_pair(C_SEL) | curses.A_BOLD
 
-    W    = min(60, mx - 4)
-    x    = max(2, (mx - W) // 2)
-    dim  = curses.color_pair(C_DIM)  | curses.A_DIM
-    acc  = curses.color_pair(C_ACCENT)
+    W     = min(64, mx - 4)
+    box_x = max(2, (mx - W) // 2)
+    INW   = W - 28   # inner width of each input box
+    row   = CONTENT_ROW
 
-    def row_kv(label, value, val_attr=0):
-        nonlocal row
-        if row >= my - 3:
-            return
-        put(win, row, x,           f"  {label:<22}", dim)
-        put(win, row, x + 24,       str(value),      val_attr or acc)
+    # ── box top ──────────────────────────────────────────
+    put(win, row, box_x, "\u250c" + "\u2500" * (W - 2) + "\u2510", acc)
+    row += 1
+    put(win, row, box_x,
+        "\u2502" + " Connection Settings ".center(W - 2) + "\u2502", acc)
+    row += 1
+    put(win, row, box_x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
+    row += 1
+
+    # ── field rows ───────────────────────────────────────
+    cursor_screen_pos = None   # (y, x) where curses cursor should go
+
+    for i, fld in enumerate(_FIELDS):
+        if row >= my - 4:
+            break
+
+        k       = fld["key"]
+        label   = fld["label"]
+        focused = (form.focused == i)
+
+        # Separator before credentials block
+        if k == "username":
+            inner = "\u2500" * 4 + " or use credentials " + "\u2500" * (W - 26)
+            put(win, row, box_x,
+                "\u251c" + inner[:W - 2] + "\u2524", acc)
+            row += 1
+            if row >= my - 4:
+                break
+
+        # Side borders
+        put(win, row, box_x,           "\u2502", acc)
+        put(win, row, box_x + W - 1,   "\u2502", acc)
+
+        # Label
+        lbl_attr = 0 if focused else dim
+        put(win, row, box_x + 2, f"{label:<22}", lbl_attr)
+
+        # Value: mask secrets unless toggled
+        val = form.values[k]
+        cur = form.cursors[k]
+        if fld["secret"] and not form.show_secrets.get(k, False):
+            display = "*" * len(val)
+            disp_cur = cur    # cursor position is the same
+        else:
+            display  = val
+            disp_cur = cur
+
+        # Clip long values to fit in the box; scroll so cursor is always visible
+        visible_w = INW - 2
+        if len(display) > visible_w:
+            start    = max(0, disp_cur - visible_w + 1)
+            display  = display[start:start + visible_w]
+            disp_cur = disp_cur - start
+        disp_cur = min(disp_cur, len(display))
+
+        # Input box
+        input_x  = box_x + 25
+        box_attr = sel if focused else dim
+        put(win, row, input_x,                   "[", box_attr)
+        put(win, row, input_x + 1,
+            f"{display:<{visible_w}}", sel if focused else 0)
+        put(win, row, input_x + 1 + visible_w,   "]", box_attr)
+
+        if focused:
+            cursor_screen_pos = (row, input_x + 1 + disp_cur)
+
         row += 1
 
-    put(win, row, x, "\u250c" + "\u2500" * (W - 2) + "\u2510", acc)
-    row += 1
-    put(win, row, x, "\u2502" + " Connection ".center(W - 2) + "\u2502", acc)
-    row += 1
-    put(win, row, x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
-    row += 1
+    # ── separator before poll/temp ────────────────────────
+    if row < my - 4:
+        put(win, row, box_x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
+        row += 1
 
-    row_kv("Host",           config.get("host", "—"))
-    row_kv("Auth",           "API key" if config.get("api_key") else
-                             f"user: {config.get('username', '—')}")
-    row_kv("Poll interval",  f"{config.get('interval', 5)} seconds")
-    row_kv("Temp threshold", f"{config.get('temp_threshold', 82)}°C")
+    # ── Save & Connect button ─────────────────────────────
+    if row < my - 3:
+        save_focused = (form.focused == _SAVE_IDX)
+        save_label   = "  [ Save & Connect ]  "
+        save_attr    = sel if save_focused else (curses.color_pair(C_GOOD) | curses.A_BOLD)
+        center_x     = box_x + max(0, (W - len(save_label)) // 2)
+        put(win, row, box_x,           "\u2502", acc)
+        put(win, row, box_x + W - 1,   "\u2502", acc)
+        put(win, row, center_x, save_label, save_attr)
+        if save_focused:
+            cursor_screen_pos = None   # hide text cursor on button
+        row += 1
 
-    put(win, row, x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
-    row += 1
-    put(win, row, x, "\u2502" + " TrueNAS ".center(W - 2) + "\u2502", acc)
-    row += 1
-    put(win, row, x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
-    row += 1
+    # ── box bottom ────────────────────────────────────────
+    if row < my - 2:
+        put(win, row, box_x, "\u2514" + "\u2500" * (W - 2) + "\u2518", acc)
+        row += 1
 
-    s = state.stats
-    if s:
-        row_kv("Hostname", s.get("hostname", "—"))
-        row_kv("Version",  s.get("version",  "—"))
-        row_kv("Uptime",   s.get("uptime",   "—"))
-        la = s.get("loadavg", [])
-        if la:
-            row_kv("Load avg", "  ".join(f"{x:.2f}" for x in la))
-        pools = s.get("pools", [])
-        row_kv("Pools",    str(len(pools)) if pools else "—")
+    # ── status message (after save attempt) ───────────────
+    if form.status and row < my - 2:
+        st_attr = (curses.color_pair(C_GOOD) | curses.A_BOLD if form.status_ok
+                   else curses.color_pair(C_CRIT) | curses.A_BOLD)
+        put(win, row, box_x + 2, form.status, st_attr)
+
+    # Move the real cursor
+    if cursor_screen_pos:
+        curses.curs_set(1)
+        try:
+            win.move(*cursor_screen_pos)
+        except curses.error:
+            pass
     else:
-        put(win, row, x + 2, "No data yet — waiting for first poll...", dim)
-        row += 1
+        curses.curs_set(0)
 
-    put(win, row, x, "\u2514" + "\u2500" * (W - 2) + "\u2518", acc)
-
-    draw_hint(win, "ESC  \u2014  Back to menu")
+    draw_hint(win,
+              "Tab/\u2193  next field   \u2191/Shift+Tab  prev   "
+              "S  save   ESC  cancel")
 
 
 # ---------------------------------------------------------------------------
-# MONITOR view  (view = "monitor")
+# MONITOR view
 # ---------------------------------------------------------------------------
 
 def _pct_attr(pct):
@@ -795,20 +974,18 @@ def _pct_attr(pct):
 
 def draw_monitor(win, state, config):
     my, mx = win.getmaxyx()
-    row = CONTENT_ROW
+    row    = CONTENT_ROW
+    dim    = curses.color_pair(C_DIM)
 
     if state.stats is None:
-        put(win, row + 2, 2, "Waiting for data...",
-            curses.color_pair(C_DIM) | curses.A_DIM)
+        put(win, row + 2, 2, "Waiting for data...", dim | curses.A_DIM)
         draw_hint(win, "ESC  \u2014  Back to menu")
         return
 
     s    = state.stats
     la   = s.get("loadavg", [0, 0, 0])
     la_s = "  ".join(f"{x:.2f}" for x in la) if la else "N/A"
-    dim  = curses.color_pair(C_DIM)
 
-    # CPU
     cpu = s.get("cpu_percent")
     if cpu is not None:
         marker = " !!" if cpu >= 90 else "  ~" if cpu >= 70 else "   "
@@ -820,22 +997,19 @@ def draw_monitor(win, state, config):
         put(win, row, 0, "  CPU Usage   N/A", dim)
     row += 1
 
-    # Memory
     mp = s.get("memory_percent")
     mu = s.get("memory_used")
     mt = s.get("memory_total")
     if mp is not None and mt:
         marker = " !!" if mp >= 90 else "  ~" if mp >= 70 else "   "
-        detail = f"{format_bytes(mu)} / {format_bytes(mt)}"
         put(win, row, 0,  "  Memory     ", dim)
         put(win, row, 13, f"{mp:5.1f}%  ", 0)
         put(win, row, 21, _bar(mp), _pct_attr(mp))
-        put(win, row, 43, f" {marker}  {detail}", dim)
+        put(win, row, 43, f" {marker}  {format_bytes(mu)} / {format_bytes(mt)}", dim)
     else:
         put(win, row, 0, "  Memory      N/A", dim)
     row += 1
 
-    # Network
     rx    = s.get("net_rx") or 0
     tx    = s.get("net_tx") or 0
     iface = s.get("net_iface", "")
@@ -848,7 +1022,6 @@ def draw_monitor(win, state, config):
         put(win, row, 51, f"[{iface}]", dim | curses.A_DIM)
     row += 1
 
-    # CPU Temperature
     temp           = s.get("cpu_temp")
     temp_threshold = config.get("temp_threshold", 82)
     if temp is not None:
@@ -868,7 +1041,6 @@ def draw_monitor(win, state, config):
         put(win, row, 0, "  CPU Temp    N/A", dim)
     row += 1
 
-    # Storage Pools
     pools = s.get("pools", [])
     if pools and row < my - 4:
         row += 1
@@ -887,11 +1059,12 @@ def draw_monitor(win, state, config):
             total = pool.get("total", 0)
             avail = pool.get("available", 0)
             marker = "  !!" if pct >= 85 else "   ~" if pct >= 70 else "    "
-            detail = f"{format_bytes(used)} / {format_bytes(total)}  ({format_bytes(avail)} free)"
             put(win, row, 0,  f"  Pool: {name:<14}", curses.color_pair(C_ACCENT))
             put(win, row, 22, f" {pct:5.1f}%  ", 0)
             put(win, row, 31, _bar(pct, 16), _pct_attr(pct))
-            put(win, row, 49, f"{marker}  {detail}", dim)
+            put(win, row, 49,
+                f"{marker}  {format_bytes(used)} / {format_bytes(total)}"
+                f"  ({format_bytes(avail)} free)", dim)
             row += 1
 
             if row < my - 3:
@@ -912,16 +1085,16 @@ def draw_monitor(win, state, config):
 
 
 # ---------------------------------------------------------------------------
-# ALERTS view  (view = "alerts")
+# ALERTS view
 # ---------------------------------------------------------------------------
 
-SEV_ATTR = {
+_SEV_ATTR = {
     "critical": lambda: curses.color_pair(C_CRIT)   | curses.A_BOLD,
     "warning":  lambda: curses.color_pair(C_WARN)   | curses.A_BOLD,
     "info":     lambda: curses.color_pair(C_ACCENT),
     "resolved": lambda: curses.color_pair(C_GOOD),
 }
-SEV_LABEL = {
+_SEV_LABEL = {
     "critical": "CRITICAL", "warning": "WARNING",
     "info":     "INFO",     "resolved": "RESOLVED",
 }
@@ -931,7 +1104,6 @@ def draw_alerts(win, state):
     my, mx = win.getmaxyx()
     dim    = curses.color_pair(C_DIM) | curses.A_DIM
 
-    # Bottom bar
     draw_hint(win, "ESC  \u2014  Back to menu     C  \u2014  Clear all alerts",
               curses.color_pair(C_ACCENT) | curses.A_BOLD)
 
@@ -940,11 +1112,9 @@ def draw_alerts(win, state):
         alert_list = list(state.alerts)
 
     if not alert_list:
-        put(win, CONTENT_ROW + 2, 4, "No alerts.",
-            curses.color_pair(C_DIM) | curses.A_DIM)
+        put(win, CONTENT_ROW + 2, 4, "No alerts.", dim)
         return
 
-    # Newest at top
     display = list(reversed(alert_list[-visible:]
                              if len(alert_list) > visible else alert_list))
 
@@ -954,13 +1124,12 @@ def draw_alerts(win, state):
             break
         if "time" in a:
             sev   = a.get("severity", "info")
-            label = SEV_LABEL.get(sev, "INFO")
-            sattr = SEV_ATTR.get(sev, lambda: 0)()
+            label = _SEV_LABEL.get(sev, "INFO")
+            sattr = _SEV_ATTR.get(sev, lambda: 0)()
             ts_s  = f" [{a['time']}] "
             put(win, row, 0,          ts_s,          dim)
             put(win, row, len(ts_s),  f"{label}: ",  sattr)
-            msg_x = len(ts_s) + len(label) + 2
-            put(win, row, msg_x, a.get("message", ""), 0)
+            put(win, row, len(ts_s) + len(label) + 2, a.get("message", ""), 0)
         elif "raw" in a:
             put(win, row, 1, a["raw"], dim)
 
@@ -985,7 +1154,6 @@ def poll_loop(client, state, config, stop_event):
             with state.lock:
                 state.last_error = str(e)
             debug(f"poll error: {e}")
-
         stop_event.wait(interval)
 
 
@@ -993,11 +1161,17 @@ def poll_loop(client, state, config, stop_event):
 # Main curses loop
 # ---------------------------------------------------------------------------
 
-def run_ui(stdscr, client, state, config):
+def run_ui(stdscr, conn, state, config):
+    """
+    conn is a dict: {"client": ..., "stop_event": ..., "poll_thread": ...}
+    It is mutated when Save & Connect reconnects.
+    """
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.timeout(200)
     init_colors()
+
+    form = SettingsForm(config)
 
     VIEW_TITLES = {
         "menu":     "Main Menu",
@@ -1007,32 +1181,95 @@ def run_ui(stdscr, client, state, config):
     }
 
     while True:
-        key = stdscr.getch()
+        key  = stdscr.getch()
         view = state.current_view
 
-        # --- global keys ---
-        if key == ord("4") or (key == ord("q") or key == ord("Q")):
-            if view == "menu" or key == ord("4"):
-                break  # quit
-
-        # --- menu keys ---
-        if view == "menu":
-            if key == ord("1"):
-                state.current_view = "settings"
-            elif key == ord("2"):
-                with state.lock:
-                    state.current_view  = "alerts"
-                    state.unread_alerts = 0
-            elif key == ord("3"):
-                state.current_view = "monitor"
-            elif key == ord("4"):
-                break
-
-        # --- any view: number keys navigate, ESC returns to menu ---
-        else:
-            if key == 27:   # ESC
+        # ── Settings view: all keys go to the form ──────────────────────
+        if view == "settings":
+            if key == 27:   # ESC — cancel
                 state.current_view = "menu"
+                form = SettingsForm(config)  # discard edits
+            elif key in (ord("s"), ord("S")) and form.focused != _SAVE_IDX:
+                # S shortcut: jump to save
+                form.focused = _SAVE_IDX
+            else:
+                save_requested = form.handle_key(key)
+                if save_requested:
+                    new_cfg = form.get_config()
+                    if not new_cfg["host"]:
+                        form.status    = "Error: Host is required."
+                        form.status_ok = False
+                    elif not new_cfg["api_key"] and not (new_cfg["username"] and new_cfg["password"]):
+                        form.status    = "Error: API key or username+password required."
+                        form.status_ok = False
+                    else:
+                        form.status    = "Connecting..."
+                        form.status_ok = True
+
+                        # Render the "Connecting…" message immediately
+                        stdscr.erase()
+                        draw_header(stdscr, state, config, "Settings")
+                        draw_settings(stdscr, state, config, form)
+                        stdscr.refresh()
+
+                        # Stop old poll thread
+                        conn["stop_event"].set()
+                        conn["poll_thread"].join(timeout=3)
+
+                        # Save config
+                        config.update(new_cfg)
+                        save_config(config)
+
+                        # Try connecting
+                        new_client = TrueNASClient(
+                            host=new_cfg["host"],
+                            api_key=new_cfg.get("api_key", ""),
+                            username=new_cfg.get("username", ""),
+                            password=new_cfg.get("password", ""),
+                        )
+                        try:
+                            info = new_client.test_connection()
+                            host = info.get("hostname", new_cfg["host"])
+                            form.status    = f"Connected to {host}"
+                            form.status_ok = True
+
+                            # Start new poll thread
+                            new_stop   = threading.Event()
+                            new_thread = threading.Thread(
+                                target=poll_loop,
+                                args=(new_client, state, config, new_stop),
+                                daemon=True,
+                            )
+                            new_thread.start()
+                            conn["client"]      = new_client
+                            conn["stop_event"]  = new_stop
+                            conn["poll_thread"] = new_thread
+
+                            # Go to monitor after a moment
+                            time.sleep(0.8)
+                            state.current_view = "monitor"
+                            form = SettingsForm(config)
+
+                        except Exception as e:
+                            form.status    = f"Connection failed: {e}"
+                            form.status_ok = False
+                            # Restart old-style poll with updated config if possible
+                            new_stop   = threading.Event()
+                            new_thread = threading.Thread(
+                                target=poll_loop,
+                                args=(new_client, state, config, new_stop),
+                                daemon=True,
+                            )
+                            new_thread.start()
+                            conn["stop_event"]  = new_stop
+                            conn["poll_thread"] = new_thread
+
+        # ── All other views: number/ESC navigation ──────────────────────
+        else:
+            if key == ord("4"):
+                break   # Quit
             elif key == ord("1"):
+                form = SettingsForm(config)   # fresh form with current config
                 state.current_view = "settings"
             elif key == ord("2"):
                 with state.lock:
@@ -1040,49 +1277,32 @@ def run_ui(stdscr, client, state, config):
                     state.unread_alerts = 0
             elif key == ord("3"):
                 state.current_view = "monitor"
-            elif key == ord("4"):
-                break
+            elif key == 27:   # ESC from any view → menu
+                state.current_view = "menu"
 
-            # Alerts-only keys
-            if view == "alerts":
-                if key in (ord("c"), ord("C")):
-                    state.clear_alerts()
+            # Alerts-specific
+            if view == "alerts" and key in (ord("c"), ord("C")):
+                state.clear_alerts()
 
-        # --- render ---
+        # ── Render ──────────────────────────────────────────────────────
         stdscr.erase()
         view  = state.current_view
         title = VIEW_TITLES.get(view, "")
         draw_header(stdscr, state, config, title)
 
         if view == "menu":
+            curses.curs_set(0)
             draw_menu(stdscr, state)
         elif view == "settings":
-            draw_settings(stdscr, state, config)
+            draw_settings(stdscr, state, config, form)
         elif view == "monitor":
+            curses.curs_set(0)
             draw_monitor(stdscr, state, config)
         elif view == "alerts":
+            curses.curs_set(0)
             draw_alerts(stdscr, state)
 
         stdscr.refresh()
-
-
-# ---------------------------------------------------------------------------
-# Config loading
-# ---------------------------------------------------------------------------
-
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE) as f:
-                data = json.load(f)
-            for key in ("password", "api_key"):
-                if data.get(f"{key}_encrypted") and data.get(key):
-                    data[key] = _decrypt(data[key])
-                    data.pop(f"{key}_encrypted", None)
-            return data
-        except Exception:
-            pass
-    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -1116,37 +1336,42 @@ def main():
     if args.interval:       config["interval"]       = max(2, args.interval)
     if args.temp_threshold: config["temp_threshold"] = args.temp_threshold
 
-    if not config.get("host"):
-        parser.error(
-            "No TrueNAS host configured.\n"
-            "Use --host, or run truemonitor.py first to save settings."
-        )
-    if not config.get("api_key") and not (config.get("username") and config.get("password")):
-        parser.error(
-            "No credentials configured.\n"
-            "Use --api-key or --username/--password, or run truemonitor.py first."
-        )
-
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(DEBUG_LOG, "w") as f:
         f.write("")
 
-    client = TrueNASClient(
-        host=config["host"],
-        api_key=config.get("api_key", ""),
-        username=config.get("username", ""),
-        password=config.get("password", ""),
-    )
+    # If we have credentials try connecting; otherwise drop straight to settings
+    has_creds = (config.get("host") and
+                 (config.get("api_key") or
+                  (config.get("username") and config.get("password"))))
 
-    print(f"TrueMonitor v{APP_VERSION} — Text Mode")
-    print(f"Connecting to {config['host']}...")
-    try:
-        info = client.test_connection()
-        print(f"Connected to {info.get('hostname', config['host'])}")
-        time.sleep(0.4)
-    except Exception as e:
-        print(f"Connection failed: {e}")
-        raise SystemExit(1)
+    client = None
+    if has_creds:
+        client = TrueNASClient(
+            host=config["host"],
+            api_key=config.get("api_key", ""),
+            username=config.get("username", ""),
+            password=config.get("password", ""),
+        )
+        print(f"TrueMonitor v{APP_VERSION} — Text Mode")
+        print(f"Connecting to {config['host']}...")
+        try:
+            info = client.test_connection()
+            print(f"Connected to {info.get('hostname', config['host'])}")
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"Connection failed: {e}  (opening settings)")
+            time.sleep(1)
+            client = TrueNASClient(
+                host=config.get("host", ""),
+                api_key=config.get("api_key", ""),
+                username=config.get("username", ""),
+                password=config.get("password", ""),
+            )
+
+    if client is None:
+        # No config at all — create a placeholder client and open settings
+        client = TrueNASClient(host=config.get("host", "localhost"))
 
     state      = AppState()
     stop_event = threading.Event()
@@ -1155,11 +1380,16 @@ def main():
         target=poll_loop, args=(client, state, config, stop_event), daemon=True)
     poll_thread.start()
 
+    if not has_creds:
+        state.current_view = "settings"
+
+    conn = {"client": client, "stop_event": stop_event, "poll_thread": poll_thread}
+
     try:
-        curses.wrapper(run_ui, client, state, config)
+        curses.wrapper(run_ui, conn, state, config)
     finally:
-        stop_event.set()
-        poll_thread.join(timeout=3)
+        conn["stop_event"].set()
+        conn["poll_thread"].join(timeout=3)
 
 
 if __name__ == "__main__":
