@@ -726,7 +726,7 @@ C_CRIT   = 4   # red
 C_DIM    = 5   # white (use with A_DIM)
 C_SEL    = 6   # black on cyan  (focused field / selected item)
 C_BADGE  = 7   # white on red   (unread alert badge)
-C_BLACK  = 8   # black foreground, default background (menu key numbers)
+C_BLACK  = 8   # black on white (menu key numbers)
 
 
 def init_colors():
@@ -739,7 +739,7 @@ def init_colors():
     curses.init_pair(C_DIM,    curses.COLOR_WHITE,  -1)
     curses.init_pair(C_SEL,    curses.COLOR_BLACK,  curses.COLOR_CYAN)
     curses.init_pair(C_BADGE,  curses.COLOR_WHITE,  curses.COLOR_RED)
-    curses.init_pair(C_BLACK,  curses.COLOR_BLACK,  -1)
+    curses.init_pair(C_BLACK,  curses.COLOR_BLACK,  curses.COLOR_WHITE)
 
 
 # ---------------------------------------------------------------------------
