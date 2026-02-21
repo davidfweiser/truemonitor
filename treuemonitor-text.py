@@ -171,27 +171,41 @@ class BroadcastServer:
             return len(self._clients)
 
     def _accept_loop(self):
-        try:
-            self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self._server_sock.bind(("0.0.0.0", self.port))
-            self._server_sock.listen(10)
-            self._server_sock.settimeout(1.0)
-            while self._running:
+        # Retry binding in case the previous server socket hasn't fully closed yet.
+        for attempt in range(10):
+            if not self._running:
+                return
+            try:
+                self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self._server_sock.bind(("0.0.0.0", self.port))
+                self._server_sock.listen(10)
+                self._server_sock.settimeout(1.0)
+                break
+            except Exception as e:
+                debug(f"BroadcastServer bind attempt {attempt + 1} failed: {e}")
                 try:
-                    conn, addr = self._server_sock.accept()
-                    ip = addr[0]
-                    if self._backoff_remaining(ip) > 0:
-                        conn.close()
-                        continue
-                    threading.Thread(target=self._authenticate,
-                                     args=(conn, ip), daemon=True).start()
-                except socket.timeout:
-                    continue
+                    self._server_sock.close()
                 except Exception:
-                    break
-        except Exception as e:
-            debug(f"BroadcastServer error: {e}")
+                    pass
+                time.sleep(0.5)
+        else:
+            debug(f"BroadcastServer: could not bind port {self.port} after 10 attempts")
+            return
+
+        while self._running:
+            try:
+                conn, addr = self._server_sock.accept()
+                ip = addr[0]
+                if self._backoff_remaining(ip) > 0:
+                    conn.close()
+                    continue
+                threading.Thread(target=self._authenticate,
+                                 args=(conn, ip), daemon=True).start()
+            except socket.timeout:
+                continue
+            except Exception:
+                break
 
     def _authenticate(self, conn, ip):
         try:
@@ -214,6 +228,17 @@ class BroadcastServer:
         expected = hmac_mod.new(raw_key, challenge, hashlib.sha256).digest()
         if hmac_mod.compare_digest(response, expected):
             conn.settimeout(10.0)
+            # Aggressive TCP keepalive so dead connections are detected quickly.
+            try:
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                if hasattr(socket, "TCP_KEEPIDLE"):
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 10)
+                if hasattr(socket, "TCP_KEEPINTVL"):
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
+                if hasattr(socket, "TCP_KEEPCNT"):
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+            except Exception:
+                pass
             with self._lock:
                 self._clients.append(conn)
         else:

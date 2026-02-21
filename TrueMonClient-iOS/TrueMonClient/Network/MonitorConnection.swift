@@ -55,8 +55,12 @@ final class MonitorConnection {
         connection = conn
         isRunning = true
 
-        conn.stateUpdateHandler = { [weak self] state in
-            guard let self = self else { return }
+        // Capture conn weakly so stale connections that were replaced by a
+        // new connect() call don't fire state changes into the active session.
+        conn.stateUpdateHandler = { [weak self, weak conn] state in
+            guard let self = self, let conn = conn else { return }
+            // Ignore events from a connection that has been superseded.
+            guard conn === self.connection else { return }
             switch state {
             case .ready:
                 // Don't report .connected yet — wait for auth to complete

@@ -242,6 +242,18 @@ class BroadcastServer:
             # Authenticated
             self._emit("info", ip, f"Authenticated from {ip}")
             conn.settimeout(10.0)
+            # Aggressive TCP keepalive so dead connections (sleeping phone) are
+            # detected quickly and removed from the client list.
+            try:
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                if hasattr(socket, "TCP_KEEPIDLE"):
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 10)
+                if hasattr(socket, "TCP_KEEPINTVL"):
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
+                if hasattr(socket, "TCP_KEEPCNT"):
+                    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+            except Exception:
+                pass
             with self._lock:
                 self._clients.append(conn)
         else:
