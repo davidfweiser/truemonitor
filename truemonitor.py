@@ -1305,8 +1305,8 @@ class TrueMonitorApp:
             topo = pool.get("topology", {})
             map_btn = tk.Button(
                 title_row, text="Drive Map", bg=COLORS["button"],
-                fg="#ffffff", activebackground=COLORS["button_hover"],
-                activeforeground="#ffffff",
+                fg="#000000", activebackground=COLORS["button_hover"],
+                activeforeground="#000000",
                 font=("Helvetica", self._sf(8)), relief="flat", padx=8, pady=2,
                 command=lambda n=name, t=topo: self._show_drive_map(n, t),
             )

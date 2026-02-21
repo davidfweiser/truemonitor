@@ -598,24 +598,51 @@ class TrueNASClient:
                 allocated = p.get("allocated")
                 free      = p.get("free")
                 disks = []
+                vdev_map = {}
                 for topo_key in ("data", "cache", "log", "spare"):
+                    vdev_list = []
                     for vdev in topology.get(topo_key, []):
                         if not isinstance(vdev, dict):
                             continue
-                        members = vdev.get("children", []) or [vdev]
-                        for member in members:
-                            if not isinstance(member, dict):
-                                continue
-                            disk_name = member.get("disk") or member.get("name", "")
-                            if not disk_name:
-                                continue
-                            m   = member.get("stats", {})
-                            err = ((m.get("read_errors", 0) or 0)
-                                   + (m.get("write_errors", 0) or 0)
-                                   + (m.get("checksum_errors", 0) or 0))
-                            st  = member.get("status", "ONLINE")
-                            disks.append({"name": disk_name,
-                                          "has_error": err > 0 or st not in ("ONLINE", "")})
+                        vtype   = vdev.get("type", "STRIPE").upper()
+                        vstatus = vdev.get("status", "ONLINE")
+                        children = vdev.get("children", [])
+                        child_list = []
+                        if children:
+                            for ch in children:
+                                if not isinstance(ch, dict):
+                                    continue
+                                ch_stats = ch.get("stats", {})
+                                errs = ((ch_stats.get("read_errors", 0) or 0)
+                                        + (ch_stats.get("write_errors", 0) or 0)
+                                        + (ch_stats.get("checksum_errors", 0) or 0))
+                                cst = ch.get("status", "ONLINE")
+                                child_list.append({
+                                    "name":   ch.get("disk") or ch.get("name", "?"),
+                                    "status": cst,
+                                    "errors": errs,
+                                })
+                                disks.append({"name": child_list[-1]["name"],
+                                              "has_error": errs > 0 or cst not in ("ONLINE", "")})
+                        else:
+                            v_stats = vdev.get("stats", {})
+                            errs = ((v_stats.get("read_errors", 0) or 0)
+                                    + (v_stats.get("write_errors", 0) or 0)
+                                    + (v_stats.get("checksum_errors", 0) or 0))
+                            dname = vdev.get("disk") or vdev.get("name", "?")
+                            child_list.append({
+                                "name":   dname,
+                                "status": vstatus,
+                                "errors": errs,
+                            })
+                            disks.append({"name": dname,
+                                          "has_error": errs > 0 or vstatus not in ("ONLINE", "")})
+                        vdev_list.append({
+                            "type":   vtype,
+                            "status": vstatus,
+                            "disks":  child_list,
+                        })
+                    vdev_map[topo_key] = vdev_list
                 if total and allocated is not None:
                     pct = round(allocated / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
@@ -625,6 +652,7 @@ class TrueNASClient:
                         "total":     total,
                         "percent":   pct,
                         "disks":     disks,
+                        "topology":  vdev_map,
                     })
         except Exception as e:
             debug(f" pool error: {e}")

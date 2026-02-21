@@ -49,19 +49,17 @@ struct PoolCard: View {
             }
 
             // Drive Map button
-            if pool.topology != nil {
-                Button {
-                    showDriveMap = true
-                } label: {
-                    Label("Drive Map", systemImage: "internaldrive")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .tint(AppTheme.cardBorder)
-                .padding(.top, 4)
-                .sheet(isPresented: $showDriveMap) {
-                    DriveMapSheet(poolName: pool.name, topology: pool.topology ?? [:])
-                }
+            Button {
+                showDriveMap = true
+            } label: {
+                Label("Drive Map", systemImage: "internaldrive")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .tint(AppTheme.accent)
+            .padding(.top, 4)
+            .sheet(isPresented: $showDriveMap) {
+                DriveMapSheet(poolName: pool.name, topology: pool.topology ?? [:])
             }
         }
     }
