@@ -11,12 +11,18 @@ Usage:
     python3 treuemonitor-text.py --host 192.168.1.100 --username admin --password secret
     python3 treuemonitor-text.py --interval 10 --temp-threshold 75
 
-Keys:
-    M        Monitor view
-    A        Alerts view
-    Q        Quit
-    ESC / M  (in Alerts) Back to Monitor
-    C        (in Alerts) Clear all alerts
+Keys — Main Menu:
+    1    Settings
+    2    Alerts
+    3    Monitor
+    4    Quit
+
+Keys — Any view:
+    ESC  Return to main menu
+
+Keys — Alerts view:
+    ESC  Return to main menu
+    C    Clear all alerts
 """
 
 import curses
@@ -190,8 +196,8 @@ class TrueNASClient:
                         "aggregate": True,
                     },
                 }),
-                ("reporting/get_data",          {"graphs": graphs}),
-                ("reporting/netdata/get_data",  {"graphs": graphs}),
+                ("reporting/get_data",         {"graphs": graphs}),
+                ("reporting/netdata/get_data", {"graphs": graphs}),
             ]
 
         if self._working_report_format is not None:
@@ -395,16 +401,11 @@ class TrueNASClient:
                         continue
                     alert_id = alert.get("uuid") or alert.get("id") or str(alert)
                     level    = alert.get("level", "INFO").upper()
-                    if level in ("CRITICAL", "ERROR"):
-                        severity = "critical"
-                    elif level == "WARNING":
-                        severity = "warning"
-                    else:
-                        severity = "info"
-                    msg   = alert.get("formatted", "") or alert.get("text", "")
-                    klass = alert.get("klass", "")
+                    severity = ("critical" if level in ("CRITICAL", "ERROR")
+                                else "warning" if level == "WARNING" else "info")
+                    msg = alert.get("formatted", "") or alert.get("text", "")
                     if not msg:
-                        msg = klass or "Unknown TrueNAS alert"
+                        msg = alert.get("klass", "") or "Unknown TrueNAS alert"
                     stats["system_alerts"].append({
                         "id": alert_id, "severity": severity, "message": msg,
                     })
@@ -415,7 +416,7 @@ class TrueNASClient:
 
 
 # ---------------------------------------------------------------------------
-# Shared application state (written by poll thread, read by UI thread)
+# Shared application state
 # ---------------------------------------------------------------------------
 
 class AppState:
@@ -425,7 +426,8 @@ class AppState:
         self.alerts  = deque(maxlen=200)
         self.last_updated = None
         self.last_error   = None
-        self.current_view = "monitor"   # "monitor" | "alerts"
+        # views: "menu" | "settings" | "alerts" | "monitor"
+        self.current_view  = "menu"
         self.unread_alerts = 0
         self._temp_alert_active = False
         self._cpu_alert_active  = False
@@ -507,43 +509,43 @@ class AppState:
 
 
 # ---------------------------------------------------------------------------
-# Curses color constants (set up in init_colors)
+# Curses color pairs
 # ---------------------------------------------------------------------------
 
-C_ACCENT   = 1   # cyan
-C_GOOD     = 2   # green
-C_WARN     = 3   # yellow
-C_CRIT     = 4   # red
-C_DIM      = 5   # white (dimmed via A_DIM)
-C_SEL      = 6   # black on cyan  (selected tab)
-C_ALERT_BG = 7   # red on black   (unread badge)
+C_ACCENT  = 1   # cyan
+C_GOOD    = 2   # green
+C_WARN    = 3   # yellow
+C_CRIT    = 4   # red
+C_DIM     = 5   # white (use with A_DIM)
+C_SEL     = 6   # black on cyan  (highlighted menu item)
+C_BADGE   = 7   # white on red   (unread alert badge)
 
 
 def init_colors():
     curses.start_color()
     curses.use_default_colors()
-    curses.init_pair(C_ACCENT,   curses.COLOR_CYAN,    -1)
-    curses.init_pair(C_GOOD,     curses.COLOR_GREEN,   -1)
-    curses.init_pair(C_WARN,     curses.COLOR_YELLOW,  -1)
-    curses.init_pair(C_CRIT,     curses.COLOR_RED,     -1)
-    curses.init_pair(C_DIM,      curses.COLOR_WHITE,   -1)
-    curses.init_pair(C_SEL,      curses.COLOR_BLACK,   curses.COLOR_CYAN)
-    curses.init_pair(C_ALERT_BG, curses.COLOR_WHITE,   curses.COLOR_RED)
+    curses.init_pair(C_ACCENT, curses.COLOR_CYAN,  -1)
+    curses.init_pair(C_GOOD,   curses.COLOR_GREEN,  -1)
+    curses.init_pair(C_WARN,   curses.COLOR_YELLOW, -1)
+    curses.init_pair(C_CRIT,   curses.COLOR_RED,    -1)
+    curses.init_pair(C_DIM,    curses.COLOR_WHITE,  -1)
+    curses.init_pair(C_SEL,    curses.COLOR_BLACK,  curses.COLOR_CYAN)
+    curses.init_pair(C_BADGE,  curses.COLOR_WHITE,  curses.COLOR_RED)
 
 
 # ---------------------------------------------------------------------------
-# Safe addstr (clips to window bounds, swallows curses.error)
+# Drawing utilities
 # ---------------------------------------------------------------------------
 
 def put(win, y, x, text, attr=0):
     my, mx = win.getmaxyx()
     if y < 0 or y >= my or x < 0 or x >= mx:
         return
-    available = mx - x
-    if available <= 0:
+    avail = mx - x
+    if avail <= 0:
         return
     try:
-        win.addstr(y, x, str(text)[:available], attr)
+        win.addstr(y, x, str(text)[:avail], attr)
     except curses.error:
         pass
 
@@ -557,24 +559,34 @@ def hline(win, y, attr=0):
             pass
 
 
+def fill_row(win, y, attr=0):
+    """Fill an entire row with spaces (used for highlighted rows)."""
+    my, mx = win.getmaxyx()
+    if 0 <= y < my:
+        try:
+            win.addstr(y, 0, " " * (mx - 1), attr)
+        except curses.error:
+            pass
+
+
 # ---------------------------------------------------------------------------
-# Header (rows 0-3)
+# Common header drawn at the top of every screen (rows 0-3)
 # ---------------------------------------------------------------------------
 
-HEADER_ROWS = 4
-NAV_ROW     = 4
-SEP_ROW     = 5
-CONTENT_ROW = 6
+HEADER_ROWS = 4   # rows consumed by the header
+CONTENT_ROW = HEADER_ROWS  # first row available for content
 
 
-def draw_header(win, state, config):
+def draw_header(win, state, config, title=""):
     my, mx = win.getmaxyx()
 
-    # Row 0 — app title
-    put(win, 0, 0, f" TrueMonitor v{APP_VERSION}  —  Text Mode",
-        curses.color_pair(C_ACCENT) | curses.A_BOLD)
+    # Row 0 — app name + current screen
+    app_str  = f" TrueMonitor v{APP_VERSION}"
+    if title:
+        app_str += f"  \u2014  {title}"
+    put(win, 0, 0, app_str, curses.color_pair(C_ACCENT) | curses.A_BOLD)
 
-    # Row 1 — server info
+    # Row 1 — server / connection info
     s = state.stats
     if s:
         host   = s.get("hostname", "N/A")
@@ -585,57 +597,192 @@ def draw_header(win, state, config):
         info = f" {config.get('host', '?')}  —  connecting..."
     put(win, 1, 0, info, curses.color_pair(C_DIM) | curses.A_DIM)
 
-    # Row 2 — update timestamp / error
+    # Row 2 — poll timestamp / error
     if state.last_updated:
-        ts       = state.last_updated.strftime("%H:%M:%S")
-        interval = config.get("interval", 5)
-        row2     = f" Updated: {ts}  |  Poll: {interval}s"
+        ts  = state.last_updated.strftime("%H:%M:%S")
+        iv  = config.get("interval", 5)
+        row2 = f" Updated: {ts}  |  Poll: {iv}s"
         if state.last_error:
             row2 += f"  |  Error: {state.last_error[:50]}"
         put(win, 2, 0, row2, curses.color_pair(C_DIM) | curses.A_DIM)
+    else:
+        put(win, 2, 0, " Waiting for first poll...", curses.color_pair(C_DIM) | curses.A_DIM)
 
     # Row 3 — separator
     hline(win, 3, curses.color_pair(C_DIM) | curses.A_DIM)
 
 
 # ---------------------------------------------------------------------------
-# Navigation bar (row 4)
+# Bottom hint bar
 # ---------------------------------------------------------------------------
 
-def draw_nav(win, state):
+def draw_hint(win, text, attr=None):
+    my, mx = win.getmaxyx()
+    if attr is None:
+        attr = curses.color_pair(C_DIM) | curses.A_DIM
+    hline(win, my - 2, curses.color_pair(C_DIM) | curses.A_DIM)
+    put(win, my - 1, 0, " " + text, attr)
+
+
+# ---------------------------------------------------------------------------
+# MENU view  (view = "menu")
+# ---------------------------------------------------------------------------
+
+MENU_ITEMS = [
+    ("1", "Settings",  "settings"),
+    ("2", "Alerts",    "alerts"),
+    ("3", "Monitor",   "monitor"),
+    ("4", "Quit",      "quit"),
+]
+
+
+def draw_menu(win, state):
     my, mx = win.getmaxyx()
 
-    # Build tab labels
-    alert_count   = len(state.alerts)
-    unread        = state.unread_alerts
-    alert_label   = f"Alerts ({alert_count})"
-    if unread > 0:
-        alert_label += f" [{unread} new]"
+    # Quick stats summary line if data is available
+    row = CONTENT_ROW + 1
+    s   = state.stats
+    if s:
+        cpu    = s.get("cpu_percent")
+        mp     = s.get("memory_percent")
+        temp   = s.get("cpu_temp")
+        cpu_s  = f"{cpu:.1f}%" if cpu is not None else "N/A"
+        mem_s  = f"{mp:.1f}%"  if mp  is not None else "N/A"
+        tmp_s  = f"{temp:.1f}\u00b0C" if temp is not None else "N/A"
+        summary = f" CPU {cpu_s}   Mem {mem_s}   Temp {tmp_s}"
 
-    tabs = [
-        ("M", "Monitor", state.current_view == "monitor"),
-        ("A", alert_label, state.current_view == "alerts"),
-    ]
+        def _c(v, hi, lo):
+            if v is None:
+                return curses.color_pair(C_DIM)
+            return (curses.color_pair(C_CRIT) if v >= hi
+                    else curses.color_pair(C_WARN) if v >= lo
+                    else curses.color_pair(C_GOOD))
 
-    x = 1
-    for key, label, selected in tabs:
-        tag = f" [{key}] {label} "
-        if selected:
-            put(win, NAV_ROW, x, tag, curses.color_pair(C_SEL) | curses.A_BOLD)
+        put(win, row, 0, f" CPU  ", curses.color_pair(C_DIM))
+        put(win, row, 6, f"{cpu_s:<8}", _c(cpu, 90, 70))
+        put(win, row, 14, "Mem  ", curses.color_pair(C_DIM))
+        put(win, row, 19, f"{mem_s:<8}", _c(mp, 90, 70))
+        put(win, row, 27, "Temp  ", curses.color_pair(C_DIM))
+        put(win, row, 33, tmp_s, _c(temp, 80, 60))
+        row += 2
+    else:
+        row += 2
+
+    # Menu box
+    box_w = 36
+    box_x = max(2, (mx - box_w) // 2)
+
+    put(win, row, box_x, "\u250c" + "\u2500" * (box_w - 2) + "\u2510",
+        curses.color_pair(C_ACCENT))
+    row += 1
+    put(win, row, box_x, "\u2502" + " Select an option ".center(box_w - 2) + "\u2502",
+        curses.color_pair(C_ACCENT))
+    row += 1
+    put(win, row, box_x, "\u251c" + "\u2500" * (box_w - 2) + "\u2524",
+        curses.color_pair(C_ACCENT))
+    row += 1
+
+    for key, label, view in MENU_ITEMS:
+        if row >= my - 3:
+            break
+        # Annotate Alerts with unread count
+        display_label = label
+        if view == "alerts":
+            count  = len(state.alerts)
+            unread = state.unread_alerts
+            display_label = f"Alerts  ({count} total"
+            if unread > 0:
+                display_label += f", {unread} new"
+            display_label += ")"
+
+        line = f"  {key}.  {display_label}"
+        pad  = box_w - 2 - len(line)
+        line = line + " " * max(0, pad)
+
+        put(win, row, box_x, "\u2502", curses.color_pair(C_ACCENT))
+        put(win, row, box_x + 1, f"  ", 0)
+        put(win, row, box_x + 3, f"{key}.", curses.color_pair(C_SEL) | curses.A_BOLD)
+
+        if view == "alerts" and state.unread_alerts > 0:
+            put(win, row, box_x + 6, f"  {display_label}",
+                curses.color_pair(C_BADGE) | curses.A_BOLD)
+        elif view == "quit":
+            put(win, row, box_x + 6, f"  {display_label}",
+                curses.color_pair(C_CRIT))
         else:
-            put(win, NAV_ROW, x, tag, curses.color_pair(C_DIM))
-        x += len(tag) + 1
+            put(win, row, box_x + 6, f"  {display_label}", 0)
 
-    # Quit hint on right
-    quit_tag = " [Q] Quit "
-    put(win, NAV_ROW, mx - len(quit_tag) - 1, quit_tag, curses.color_pair(C_DIM))
+        put(win, row, box_x + box_w - 1, "\u2502", curses.color_pair(C_ACCENT))
+        row += 1
 
-    # Separator below nav
-    hline(win, SEP_ROW, curses.color_pair(C_DIM) | curses.A_DIM)
+    put(win, row, box_x, "\u2514" + "\u2500" * (box_w - 2) + "\u2518",
+        curses.color_pair(C_ACCENT))
+
+    draw_hint(win, "Press a number key to select")
 
 
 # ---------------------------------------------------------------------------
-# Monitor view
+# SETTINGS view  (view = "settings")
+# ---------------------------------------------------------------------------
+
+def draw_settings(win, state, config):
+    my, mx = win.getmaxyx()
+    row = CONTENT_ROW + 1
+
+    W    = min(60, mx - 4)
+    x    = max(2, (mx - W) // 2)
+    dim  = curses.color_pair(C_DIM)  | curses.A_DIM
+    acc  = curses.color_pair(C_ACCENT)
+
+    def row_kv(label, value, val_attr=0):
+        nonlocal row
+        if row >= my - 3:
+            return
+        put(win, row, x,           f"  {label:<22}", dim)
+        put(win, row, x + 24,       str(value),      val_attr or acc)
+        row += 1
+
+    put(win, row, x, "\u250c" + "\u2500" * (W - 2) + "\u2510", acc)
+    row += 1
+    put(win, row, x, "\u2502" + " Connection ".center(W - 2) + "\u2502", acc)
+    row += 1
+    put(win, row, x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
+    row += 1
+
+    row_kv("Host",           config.get("host", "—"))
+    row_kv("Auth",           "API key" if config.get("api_key") else
+                             f"user: {config.get('username', '—')}")
+    row_kv("Poll interval",  f"{config.get('interval', 5)} seconds")
+    row_kv("Temp threshold", f"{config.get('temp_threshold', 82)}°C")
+
+    put(win, row, x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
+    row += 1
+    put(win, row, x, "\u2502" + " TrueNAS ".center(W - 2) + "\u2502", acc)
+    row += 1
+    put(win, row, x, "\u251c" + "\u2500" * (W - 2) + "\u2524", acc)
+    row += 1
+
+    s = state.stats
+    if s:
+        row_kv("Hostname", s.get("hostname", "—"))
+        row_kv("Version",  s.get("version",  "—"))
+        row_kv("Uptime",   s.get("uptime",   "—"))
+        la = s.get("loadavg", [])
+        if la:
+            row_kv("Load avg", "  ".join(f"{x:.2f}" for x in la))
+        pools = s.get("pools", [])
+        row_kv("Pools",    str(len(pools)) if pools else "—")
+    else:
+        put(win, row, x + 2, "No data yet — waiting for first poll...", dim)
+        row += 1
+
+    put(win, row, x, "\u2514" + "\u2500" * (W - 2) + "\u2518", acc)
+
+    draw_hint(win, "ESC  \u2014  Back to menu")
+
+
+# ---------------------------------------------------------------------------
+# MONITOR view  (view = "monitor")
 # ---------------------------------------------------------------------------
 
 def _pct_attr(pct):
@@ -651,88 +798,88 @@ def draw_monitor(win, state, config):
     row = CONTENT_ROW
 
     if state.stats is None:
-        put(win, row, 2, "Connecting to TrueNAS...", curses.color_pair(C_DIM) | curses.A_DIM)
+        put(win, row + 2, 2, "Waiting for data...",
+            curses.color_pair(C_DIM) | curses.A_DIM)
+        draw_hint(win, "ESC  \u2014  Back to menu")
         return
 
-    s  = state.stats
-    la = s.get("loadavg", [0, 0, 0])
+    s    = state.stats
+    la   = s.get("loadavg", [0, 0, 0])
     la_s = "  ".join(f"{x:.2f}" for x in la) if la else "N/A"
+    dim  = curses.color_pair(C_DIM)
 
-    # --- CPU ---
+    # CPU
     cpu = s.get("cpu_percent")
     if cpu is not None:
         marker = " !!" if cpu >= 90 else "  ~" if cpu >= 70 else "   "
-        put(win, row, 0,  "  CPU Usage  ", curses.color_pair(C_DIM))
+        put(win, row, 0,  "  CPU Usage  ", dim)
         put(win, row, 13, f"{cpu:5.1f}%  ", 0)
         put(win, row, 21, _bar(cpu), _pct_attr(cpu))
-        put(win, row, 43, f" {marker}  load: {la_s}", curses.color_pair(C_DIM))
+        put(win, row, 43, f" {marker}  load: {la_s}", dim)
     else:
-        put(win, row, 0, "  CPU Usage   N/A", curses.color_pair(C_DIM))
+        put(win, row, 0, "  CPU Usage   N/A", dim)
     row += 1
 
-    # --- Memory ---
+    # Memory
     mp = s.get("memory_percent")
     mu = s.get("memory_used")
     mt = s.get("memory_total")
     if mp is not None and mt:
         marker = " !!" if mp >= 90 else "  ~" if mp >= 70 else "   "
         detail = f"{format_bytes(mu)} / {format_bytes(mt)}"
-        put(win, row, 0,  "  Memory     ", curses.color_pair(C_DIM))
+        put(win, row, 0,  "  Memory     ", dim)
         put(win, row, 13, f"{mp:5.1f}%  ", 0)
         put(win, row, 21, _bar(mp), _pct_attr(mp))
-        put(win, row, 43, f" {marker}  {detail}", curses.color_pair(C_DIM))
+        put(win, row, 43, f" {marker}  {detail}", dim)
     else:
-        put(win, row, 0, "  Memory      N/A", curses.color_pair(C_DIM))
+        put(win, row, 0, "  Memory      N/A", dim)
     row += 1
 
-    # --- Network ---
+    # Network
     rx    = s.get("net_rx") or 0
     tx    = s.get("net_tx") or 0
     iface = s.get("net_iface", "")
-    put(win, row, 0,  "  Network    ", curses.color_pair(C_DIM))
+    put(win, row, 0,  "  Network    ", dim)
     put(win, row, 13, "down ", curses.color_pair(C_GOOD))
     put(win, row, 18, f"{format_bytes(rx, per_second=True):<14}", curses.color_pair(C_GOOD))
     put(win, row, 32, "  up ", curses.color_pair(C_ACCENT))
     put(win, row, 37, f"{format_bytes(tx, per_second=True):<14}", curses.color_pair(C_ACCENT))
     if iface:
-        put(win, row, 51, f"[{iface}]", curses.color_pair(C_DIM) | curses.A_DIM)
+        put(win, row, 51, f"[{iface}]", dim | curses.A_DIM)
     row += 1
 
-    # --- CPU Temperature ---
-    temp            = s.get("cpu_temp")
-    temp_threshold  = config.get("temp_threshold", 82)
+    # CPU Temperature
+    temp           = s.get("cpu_temp")
+    temp_threshold = config.get("temp_threshold", 82)
     if temp is not None:
         if temp >= 80:
-            t_attr  = curses.color_pair(C_CRIT) | curses.A_BOLD
-            t_label = "HOT!"
+            t_attr, t_label = curses.color_pair(C_CRIT) | curses.A_BOLD, "HOT!"
         elif temp >= 60:
-            t_attr  = curses.color_pair(C_WARN)
-            t_label = "Warm"
+            t_attr, t_label = curses.color_pair(C_WARN), "Warm"
         else:
-            t_attr  = curses.color_pair(C_GOOD)
-            t_label = "Normal"
-        put(win, row, 0,  "  CPU Temp   ", curses.color_pair(C_DIM))
+            t_attr, t_label = curses.color_pair(C_GOOD), "Normal"
+        put(win, row, 0,  "  CPU Temp   ", dim)
         put(win, row, 13, f"{temp:.1f}\u00b0C", t_attr)
         put(win, row, 21, f"  ({t_label})", t_attr)
         if temp >= temp_threshold:
-            put(win, row, 32, "  \u26a0 ALERT",
+            put(win, row, 33, "  \u26a0 ALERT",
                 curses.color_pair(C_CRIT) | curses.A_BOLD)
     else:
-        put(win, row, 0, "  CPU Temp    N/A", curses.color_pair(C_DIM))
+        put(win, row, 0, "  CPU Temp    N/A", dim)
     row += 1
 
-    # --- Storage Pools ---
+    # Storage Pools
     pools = s.get("pools", [])
-    if pools and row < my - 2:
+    if pools and row < my - 4:
         row += 1
         put(win, row, 0, "  STORAGE POOLS",
             curses.color_pair(C_ACCENT) | curses.A_BOLD)
         row += 1
-        hline(win, row, curses.color_pair(C_DIM) | curses.A_DIM)
+        hline(win, row, dim | curses.A_DIM)
         row += 1
 
         for pool in pools:
-            if row >= my - 2:
+            if row >= my - 3:
                 break
             name  = pool.get("name", "?")
             pct   = pool.get("percent", 0)
@@ -741,36 +888,36 @@ def draw_monitor(win, state, config):
             avail = pool.get("available", 0)
             marker = "  !!" if pct >= 85 else "   ~" if pct >= 70 else "    "
             detail = f"{format_bytes(used)} / {format_bytes(total)}  ({format_bytes(avail)} free)"
-
             put(win, row, 0,  f"  Pool: {name:<14}", curses.color_pair(C_ACCENT))
             put(win, row, 22, f" {pct:5.1f}%  ", 0)
             put(win, row, 31, _bar(pct, 16), _pct_attr(pct))
-            put(win, row, 49, f"{marker}  {detail}", curses.color_pair(C_DIM))
+            put(win, row, 49, f"{marker}  {detail}", dim)
             row += 1
 
-            if row < my - 2:
+            if row < my - 3:
                 disks = pool.get("disks", [])
                 if disks:
-                    put(win, row, 4, "Disks: ", curses.color_pair(C_DIM) | curses.A_DIM)
+                    put(win, row, 4, "Disks: ", dim | curses.A_DIM)
                     dx = 11
                     for d in disks:
-                        name_s = d["name"]
-                        flag   = "ERR" if d["has_error"] else "ok"
-                        tag    = f"{name_s}[{flag}] "
-                        attr   = (curses.color_pair(C_CRIT) | curses.A_BOLD
-                                  if d["has_error"] else curses.color_pair(C_GOOD))
+                        flag = "ERR" if d["has_error"] else "ok"
+                        tag  = f"{d['name']}[{flag}] "
+                        attr = (curses.color_pair(C_CRIT) | curses.A_BOLD
+                                if d["has_error"] else curses.color_pair(C_GOOD))
                         put(win, row, dx, tag, attr)
                         dx += len(tag)
                     row += 1
 
+    draw_hint(win, "ESC  \u2014  Back to menu")
+
 
 # ---------------------------------------------------------------------------
-# Alerts view
+# ALERTS view  (view = "alerts")
 # ---------------------------------------------------------------------------
 
 SEV_ATTR = {
-    "critical": lambda: curses.color_pair(C_CRIT) | curses.A_BOLD,
-    "warning":  lambda: curses.color_pair(C_WARN) | curses.A_BOLD,
+    "critical": lambda: curses.color_pair(C_CRIT)   | curses.A_BOLD,
+    "warning":  lambda: curses.color_pair(C_WARN)   | curses.A_BOLD,
     "info":     lambda: curses.color_pair(C_ACCENT),
     "resolved": lambda: curses.color_pair(C_GOOD),
 }
@@ -782,54 +929,40 @@ SEV_LABEL = {
 
 def draw_alerts(win, state):
     my, mx = win.getmaxyx()
+    dim    = curses.color_pair(C_DIM) | curses.A_DIM
 
-    # Bottom hint bar
-    hint = " [ESC] or [M] Monitor   [C] Clear All "
-    hline(win, my - 2, curses.color_pair(C_DIM) | curses.A_DIM)
-    put(win, my - 1, 0, hint, curses.color_pair(C_ACCENT) | curses.A_BOLD)
+    # Bottom bar
+    draw_hint(win, "ESC  \u2014  Back to menu     C  \u2014  Clear all alerts",
+              curses.color_pair(C_ACCENT) | curses.A_BOLD)
 
-    visible = my - CONTENT_ROW - 2  # rows available for alert list
+    visible = my - CONTENT_ROW - 2
     with state.lock:
         alert_list = list(state.alerts)
 
     if not alert_list:
-        put(win, CONTENT_ROW, 2, "No alerts yet.", curses.color_pair(C_DIM) | curses.A_DIM)
+        put(win, CONTENT_ROW + 2, 4, "No alerts.",
+            curses.color_pair(C_DIM) | curses.A_DIM)
         return
 
-    # Show newest at top
-    display = list(reversed(alert_list[-visible:])) if len(alert_list) > visible else list(reversed(alert_list))
+    # Newest at top
+    display = list(reversed(alert_list[-visible:]
+                             if len(alert_list) > visible else alert_list))
 
     for i, a in enumerate(display):
         row = CONTENT_ROW + i
         if row >= my - 2:
             break
         if "time" in a:
-            sev    = a.get("severity", "info")
-            label  = SEV_LABEL.get(sev, "INFO")
-            s_attr = SEV_ATTR.get(sev, lambda: 0)()
-            ts_str = f" [{a['time']}] "
-            put(win, row, 0,          ts_str,          curses.color_pair(C_DIM) | curses.A_DIM)
-            put(win, row, len(ts_str), f"{label}: ",   s_attr)
-            msg_x = len(ts_str) + len(label) + 2
-            msg   = a.get("message", "")
-            put(win, row, msg_x, msg, 0)
+            sev   = a.get("severity", "info")
+            label = SEV_LABEL.get(sev, "INFO")
+            sattr = SEV_ATTR.get(sev, lambda: 0)()
+            ts_s  = f" [{a['time']}] "
+            put(win, row, 0,          ts_s,          dim)
+            put(win, row, len(ts_s),  f"{label}: ",  sattr)
+            msg_x = len(ts_s) + len(label) + 2
+            put(win, row, msg_x, a.get("message", ""), 0)
         elif "raw" in a:
-            put(win, row, 1, a["raw"], curses.color_pair(C_DIM) | curses.A_DIM)
-
-
-# ---------------------------------------------------------------------------
-# Monitor hint bar (bottom of monitor view)
-# ---------------------------------------------------------------------------
-
-def draw_monitor_hint(win, state):
-    my, mx = win.getmaxyx()
-    unread = state.unread_alerts
-    if unread > 0:
-        hint = f" [A] Alerts  ({unread} unread) "
-        put(win, my - 1, 0, hint, curses.color_pair(C_ALERT_BG) | curses.A_BOLD)
-    else:
-        hint = " [A] Alerts   [Q] Quit "
-        put(win, my - 1, 0, hint, curses.color_pair(C_DIM) | curses.A_DIM)
+            put(win, row, 1, a["raw"], dim)
 
 
 # ---------------------------------------------------------------------------
@@ -863,40 +996,70 @@ def poll_loop(client, state, config, stop_event):
 def run_ui(stdscr, client, state, config):
     curses.curs_set(0)
     stdscr.nodelay(True)
-    stdscr.timeout(200)   # refresh every 200 ms
+    stdscr.timeout(200)
     init_colors()
+
+    VIEW_TITLES = {
+        "menu":     "Main Menu",
+        "settings": "Settings",
+        "alerts":   "Alerts",
+        "monitor":  "Monitor",
+    }
 
     while True:
         key = stdscr.getch()
+        view = state.current_view
 
-        # --- keyboard handling ---
-        if key in (ord("q"), ord("Q")):
-            break
-        elif key in (ord("m"), ord("M")):
-            with state.lock:
-                state.current_view  = "monitor"
-                state.unread_alerts = 0
-        elif key in (ord("a"), ord("A")):
-            with state.lock:
-                state.current_view  = "alerts"
-                state.unread_alerts = 0
-        elif state.current_view == "alerts":
-            if key == 27:   # ESC
+        # --- global keys ---
+        if key == ord("4") or (key == ord("q") or key == ord("Q")):
+            if view == "menu" or key == ord("4"):
+                break  # quit
+
+        # --- menu keys ---
+        if view == "menu":
+            if key == ord("1"):
+                state.current_view = "settings"
+            elif key == ord("2"):
                 with state.lock:
-                    state.current_view  = "monitor"
+                    state.current_view  = "alerts"
                     state.unread_alerts = 0
-            elif key in (ord("c"), ord("C")):
-                state.clear_alerts()
+            elif key == ord("3"):
+                state.current_view = "monitor"
+            elif key == ord("4"):
+                break
+
+        # --- any view: number keys navigate, ESC returns to menu ---
+        else:
+            if key == 27:   # ESC
+                state.current_view = "menu"
+            elif key == ord("1"):
+                state.current_view = "settings"
+            elif key == ord("2"):
+                with state.lock:
+                    state.current_view  = "alerts"
+                    state.unread_alerts = 0
+            elif key == ord("3"):
+                state.current_view = "monitor"
+            elif key == ord("4"):
+                break
+
+            # Alerts-only keys
+            if view == "alerts":
+                if key in (ord("c"), ord("C")):
+                    state.clear_alerts()
 
         # --- render ---
         stdscr.erase()
-        draw_header(stdscr, state, config)
-        draw_nav(stdscr, state)
+        view  = state.current_view
+        title = VIEW_TITLES.get(view, "")
+        draw_header(stdscr, state, config, title)
 
-        view = state.current_view
-        if view == "monitor":
+        if view == "menu":
+            draw_menu(stdscr, state)
+        elif view == "settings":
+            draw_settings(stdscr, state, config)
+        elif view == "monitor":
             draw_monitor(stdscr, state, config)
-            draw_monitor_hint(stdscr, state)
         elif view == "alerts":
             draw_alerts(stdscr, state)
 
@@ -934,8 +1097,7 @@ def main():
             "If no arguments are given, settings are read from\n"
             f"  {CONFIG_FILE}\n"
             "(saved by truemonitor.py). CLI args override saved settings.\n\n"
-            "Keys: M=Monitor  A=Alerts  Q=Quit\n"
-            "      In Alerts: ESC/M=Back  C=Clear"
+            "Keys: 1=Settings  2=Alerts  3=Monitor  4=Quit  ESC=Menu"
         ),
     )
     parser.add_argument("--host",           metavar="IP_OR_HOST")
@@ -947,12 +1109,12 @@ def main():
     args = parser.parse_args()
 
     config = load_config()
-    if args.host:           config["host"]           = args.host
-    if args.api_key:        config["api_key"]         = args.api_key
-    if args.username:       config["username"]        = args.username
-    if args.password:       config["password"]        = args.password
-    if args.interval:       config["interval"]        = max(2, args.interval)
-    if args.temp_threshold: config["temp_threshold"]  = args.temp_threshold
+    if args.host:           config["host"]          = args.host
+    if args.api_key:        config["api_key"]        = args.api_key
+    if args.username:       config["username"]       = args.username
+    if args.password:       config["password"]       = args.password
+    if args.interval:       config["interval"]       = max(2, args.interval)
+    if args.temp_threshold: config["temp_threshold"] = args.temp_threshold
 
     if not config.get("host"):
         parser.error(
@@ -969,13 +1131,13 @@ def main():
     with open(DEBUG_LOG, "w") as f:
         f.write("")
 
-    # Connect before entering curses so errors print normally
     client = TrueNASClient(
         host=config["host"],
         api_key=config.get("api_key", ""),
         username=config.get("username", ""),
         password=config.get("password", ""),
     )
+
     print(f"TrueMonitor v{APP_VERSION} — Text Mode")
     print(f"Connecting to {config['host']}...")
     try:
