@@ -27,7 +27,7 @@ Two companion apps — **TrueMonClient** (Python desktop) and **TrueMonClient iO
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
 - **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%)
 - **Disk Health Indicators** - Each pool card displays small colored rectangles for every disk. Green = healthy, red = errors. Hover to see the drive name.
-- **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red.
+- **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red. Drive Map and Close buttons styled in dark navy blue to match the app theme.
 
 #### Alerts Tab
 - Automatic alerts for configurable CPU temperature threshold, CPU usage >95%, and memory usage >95%
@@ -223,7 +223,7 @@ A native iPhone app that connects to TrueMonitor's broadcast server and displays
 - **Monitor tab** — CPU, Memory, Network, Temperature, and ZFS pool cards with live data
 - **Network chart** — Dual-color line graph (green = RX, cyan = TX) with 60-point history
 - **Temperature chart** — Line graph with color-coded warning/critical zone overlays
-- **Drive Map** — Vdev topology sheet per pool showing disk health
+- **Drive Map** — Vdev topology sheet per pool showing disk health; Drive Map and Done buttons styled in dark navy blue
 - **Alerts tab** — Color-coded alert list (info/warning/critical) with timestamps, including TrueNAS system alerts forwarded from the server
 - **Settings tab** — Server host/port/key, alert thresholds, connect/disconnect button
 - **Hamburger menu navigation** — Floating glass menu button with animated drawer, replacing the system tab bar so content fills the full screen
