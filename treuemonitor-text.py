@@ -726,6 +726,7 @@ C_CRIT   = 4   # red
 C_DIM    = 5   # white (use with A_DIM)
 C_SEL    = 6   # black on cyan  (focused field / selected item)
 C_BADGE  = 7   # white on red   (unread alert badge)
+C_BLACK  = 8   # black foreground, default background (menu key numbers)
 
 
 def init_colors():
@@ -738,6 +739,7 @@ def init_colors():
     curses.init_pair(C_DIM,    curses.COLOR_WHITE,  -1)
     curses.init_pair(C_SEL,    curses.COLOR_BLACK,  curses.COLOR_CYAN)
     curses.init_pair(C_BADGE,  curses.COLOR_WHITE,  curses.COLOR_RED)
+    curses.init_pair(C_BLACK,  curses.COLOR_BLACK,  -1)
 
 
 # ---------------------------------------------------------------------------
@@ -884,7 +886,7 @@ def draw_menu(win, state):
         put(win, row, box_x, "\u2502", acc)
         put(win, row, box_x + box_w - 1, "\u2502", acc)
 
-        key_attr = curses.color_pair(C_SEL) | curses.A_BOLD
+        key_attr = curses.color_pair(C_BLACK) | curses.A_BOLD
         if view == "quit":
             lbl_attr = curses.color_pair(C_CRIT)
         elif view == "alerts" and state.unread_alerts > 0:
@@ -1430,6 +1432,13 @@ def run_ui(stdscr, conn, state, config):
                         # Save config
                         config.update(new_cfg)
                         save_config(config)
+
+                        # Start/stop broadcast server per new settings
+                        if new_cfg.get("broadcast_enabled"):
+                            state.start_broadcast(new_cfg["broadcast_port"],
+                                                   new_cfg["broadcast_key"])
+                        else:
+                            state.stop_broadcast()
 
                         # Try connecting
                         new_client = TrueNASClient(
