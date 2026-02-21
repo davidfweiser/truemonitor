@@ -604,6 +604,50 @@ class TrueNASClient:
                             st  = member.get("status", "ONLINE")
                             disks.append({"name": disk_name,
                                           "has_error": err > 0 or st not in ("ONLINE", "")})
+                # Build vdev topology map for iOS Drive Map button
+                vdev_map = {}
+                for topo_key in ("data", "cache", "log", "spare", "special", "dedup"):
+                    vdevs = topology.get(topo_key, [])
+                    if not isinstance(vdevs, list) or not vdevs:
+                        continue
+                    vdev_list = []
+                    for vdev in vdevs:
+                        if not isinstance(vdev, dict):
+                            continue
+                        vtype   = vdev.get("type", "STRIPE")
+                        vstatus = vdev.get("status", "ONLINE")
+                        children = vdev.get("children", [])
+                        child_list = []
+                        if children:
+                            for ch in children:
+                                if not isinstance(ch, dict):
+                                    continue
+                                ch_stats = ch.get("stats", {})
+                                errs = ((ch_stats.get("read_errors", 0) or 0)
+                                        + (ch_stats.get("write_errors", 0) or 0)
+                                        + (ch_stats.get("checksum_errors", 0) or 0))
+                                child_list.append({
+                                    "name":   ch.get("disk") or ch.get("name", "?"),
+                                    "status": ch.get("status", "ONLINE"),
+                                    "errors": errs,
+                                })
+                        else:
+                            v_stats = vdev.get("stats", {})
+                            errs = ((v_stats.get("read_errors", 0) or 0)
+                                    + (v_stats.get("write_errors", 0) or 0)
+                                    + (v_stats.get("checksum_errors", 0) or 0))
+                            child_list.append({
+                                "name":   vdev.get("disk") or vdev.get("name", "?"),
+                                "status": vstatus,
+                                "errors": errs,
+                            })
+                        vdev_list.append({
+                            "type":   vtype,
+                            "status": vstatus,
+                            "disks":  child_list,
+                        })
+                    vdev_map[topo_key] = vdev_list
+
                 if total and allocated is not None:
                     pct = round(allocated / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
@@ -613,6 +657,7 @@ class TrueNASClient:
                         "total":     total,
                         "percent":   pct,
                         "disks":     disks,
+                        "topology":  vdev_map,
                     })
         except Exception as e:
             debug(f" pool error: {e}")
