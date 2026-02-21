@@ -2,7 +2,7 @@
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkinter, TrueMonitor provides a dark-themed GUI that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
-Two companion apps — **TrueMonClient** (Python desktop) and **TrueMonClient iOS** (native iPhone app) — can connect to TrueMonitor over the network and display the same live data remotely, without needing direct access to the TrueNAS API.
+Three companion apps can display the same live data remotely: **TrueMonClient** (Python desktop GUI), **TrueMonitor Text** (headless/SSH curses TUI), and **TrueMonClient iOS** (native iPhone app).
 
 ---
 
@@ -12,6 +12,7 @@ Two companion apps — **TrueMonClient** (Python desktop) and **TrueMonClient iO
 |------|-------------|
 | `truemonitor.py` | Main dashboard — connects to TrueNAS API, displays metrics, broadcasts data to clients |
 | `truemonclient.py` | Remote client — receives and displays live data from a running TrueMonitor instance |
+| `treuemonitor-text.py` | Text-mode TUI — same TrueNAS API, curses interface for headless/SSH use |
 | `TrueMonClient-iOS/` | Native iOS app — same monitoring dashboard for iPhone, built with SwiftUI |
 
 ---
@@ -59,6 +60,61 @@ python3 truemonitor.py
 
 ---
 
+## TrueMonitor Text
+
+A fully interactive curses TUI that connects directly to TrueNAS using the same API and credentials as `truemonitor.py`. Designed for headless servers, SSH sessions, or any environment without a display.
+
+Reads saved settings from `~/.config/truemonitor/config.json` automatically, so if you've already configured `truemonitor.py` you can launch and connect with no extra setup.
+
+### Features
+
+- **Monitor view** — CPU usage + load average, memory, network RX/TX, CPU temperature, and ZFS pool capacity with per-disk health
+- **Alerts view** — Color-coded alert log (critical/warning/info/resolved) with timestamps; TrueNAS system alerts included
+- **Settings form** — Host, API key, username/password, poll interval, temp threshold, and broadcast server toggle/port/key; all editable in-terminal
+- **Broadcast server** — Same encrypted TCP broadcast as `truemonitor.py`; enable in settings to push data to TrueMonClient instances
+- **Alert evaluation** — CPU temp, CPU usage, and memory thresholds evaluated locally; resolved alerts logged when metrics return to normal
+- **Config shared with truemonitor.py** — Reads and writes `~/.config/truemonitor/config.json`
+
+### Usage
+
+```bash
+python3 treuemonitor-text.py
+```
+
+CLI arguments override saved settings:
+
+```bash
+python3 treuemonitor-text.py --host 192.168.1.100 --api-key YOUR_KEY
+python3 treuemonitor-text.py --host 192.168.1.100 --username admin --password secret
+```
+
+### Keys
+
+| Context | Key | Action |
+|---------|-----|--------|
+| Any | `1` | Settings |
+| Any | `2` | Alerts |
+| Any | `3` | Monitor |
+| Any | `4` | Quit |
+| Any | `ESC` | Back to menu |
+| Settings | `Tab` / `↓` | Next field |
+| Settings | `Shift+Tab` / `↑` | Previous field |
+| Settings | `Space` / `Enter` | Toggle checkbox / advance field |
+| Settings | `S` | Jump to Save & Connect |
+| Settings | `←` `→` | Move cursor in field |
+| Settings | `Backspace` | Delete character |
+| Alerts | `C` | Clear all alerts |
+
+### Platform note
+
+`curses` is included with Python on Linux and macOS. On Windows, install `windows-curses` first:
+
+```bash
+pip install windows-curses
+```
+
+---
+
 ## TrueMonClient
 
 TrueMonClient is an identical monitoring UI that receives its data from a running TrueMonitor instance over the network. It requires no TrueNAS API credentials.
@@ -89,7 +145,7 @@ TrueMonClient will connect within seconds and begin displaying the same live met
 
 ## Broadcast Feature
 
-TrueMonitor includes a built-in TCP broadcast server that pushes encrypted monitoring data to any connected TrueMonClient instances after every poll cycle.
+TrueMonitor includes a built-in TCP broadcast server that pushes encrypted monitoring data to any connected TrueMonClient instances after every poll cycle. `treuemonitor-text.py` includes the same broadcast server and can be used as a headless alternative to `truemonitor.py`.
 
 ### Security
 
@@ -125,7 +181,7 @@ Both TrueMonitor and TrueMonClient must use the **same port and shared key**.
 ## Requirements
 
 - Python 3.8+
-- tkinter (included with Python on Windows and macOS; install `python3-tk` on Linux)
+- tkinter (included with Python on Windows and macOS; install `python3-tk` on Linux) — required by `truemonitor.py` and `truemonclient.py` only
 
 ```bash
 pip install -r requirements.txt
@@ -133,8 +189,8 @@ pip install -r requirements.txt
 
 | Package | Version | Used by |
 |---------|---------|---------|
-| `requests` | >=2.28.0 | `truemonitor.py` only |
-| `cryptography` | >=3.4 | Both — Fernet encryption + PBKDF2 key derivation |
+| `requests` | >=2.28.0 | `truemonitor.py`, `treuemonitor-text.py` |
+| `cryptography` | >=3.4 | All Python apps — Fernet encryption + PBKDF2 key derivation |
 
 ### macOS / Apple Silicon note
 
@@ -167,11 +223,10 @@ pip install -r requirements.txt
 
 ## Cross-Platform Support
 
-Both apps run on Linux, Windows, and macOS.
-
 | Feature | Linux | Windows | macOS |
 |---------|-------|---------|-------|
-| GUI | tkinter | tkinter | tkinter |
+| GUI (truemonitor / truemonclient) | tkinter | tkinter | tkinter |
+| TUI (treuemonitor-text) | curses | curses + `windows-curses` | curses |
 | Alert sound | paplay/aplay | winsound | afplay |
 | Encryption key source | /etc/machine-id | Home directory | Home directory |
 | TrueMonitor config | ~/.config/truemonitor/ | ~/.config/truemonitor/ | ~/.config/truemonitor/ |
@@ -199,6 +254,8 @@ Authentication supports both API key (Bearer token) and basic username/password.
 | `config.json` | Connection settings, encrypted credentials, alert thresholds, broadcast settings |
 | `alerts.log` | Persistent alert history |
 | `debug.log` | API debug output (cleared on each launch) |
+
+`treuemonitor-text.py` reads and writes the same `~/.config/truemonitor/` directory.
 
 ### TrueMonClient — `~/.config/truemonclient/`
 
@@ -254,6 +311,15 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 - **TrueNASClient** - REST API client: authentication, endpoint auto-detection, format caching, data parsing for CPU, memory, network, temperature, pools, and system alerts
 - **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
 - **TrueMonitorApp** - tkinter GUI with threaded background polling and thread-safe UI updates via `root.after()`
+
+### treuemonitor-text.py
+
+- **TrueNASClient** - Same REST API client as `truemonitor.py`
+- **BroadcastServer** - Same broadcast server as `truemonitor.py`
+- **AppState** - Shared data state: stats, alert log, alert evaluation, broadcast server lifecycle
+- **SettingsForm** - Curses form managing text, secret, and toggle field types with per-field cursor positions
+- **draw\_\* functions** - Curses renderers for menu, settings, monitor, and alerts views
+- **poll\_loop** - Background thread: fetches stats, evaluates alerts, and broadcasts to clients
 
 ### truemonclient.py
 
