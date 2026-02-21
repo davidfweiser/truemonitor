@@ -42,6 +42,9 @@ import sys
 import argparse
 import base64
 import hashlib
+import hmac as hmac_mod
+import socket
+import struct
 import getpass
 from datetime import datetime, timedelta, timezone
 from collections import deque
@@ -103,6 +106,161 @@ def _decrypt(ciphertext):
         return f.decrypt(ciphertext.encode()).decode()
     except (InvalidToken, Exception):
         return ciphertext
+
+
+# ---------------------------------------------------------------------------
+# Broadcast server (same protocol as truemonitor.py)
+# ---------------------------------------------------------------------------
+
+BROADCAST_DEFAULT_PORT = 7337
+BROADCAST_DEFAULT_KEY  = "truemonitor"
+_AUTH_MAGIC            = b"TRUEMON_AUTH\n"
+_BACKOFF_DELAYS        = [5, 30, 300]
+
+
+def _derive_broadcast_key(passphrase: str) -> bytes:
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32,
+                     salt=b"truemonitor_broadcast_v1", iterations=100_000)
+    return base64.urlsafe_b64encode(kdf.derive(passphrase.encode()))
+
+
+def _derive_broadcast_key_raw(passphrase: str) -> bytes:
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32,
+                     salt=b"truemonitor_broadcast_v1", iterations=100_000)
+    return kdf.derive(passphrase.encode())
+
+
+class BroadcastServer:
+    """TCP server — encrypts and streams stats to connected TrueMonClient instances."""
+
+    def __init__(self, port: int, passphrase: str):
+        self.port       = port
+        self.passphrase = passphrase
+        self._clients   = []
+        self._lock      = threading.Lock()
+        self._running   = False
+        self._server_sock = None
+        self._auth_failures: dict = {}
+        self._sec_lock  = threading.Lock()
+
+    def _get_fernet(self):
+        return Fernet(_derive_broadcast_key(self.passphrase))
+
+    def start(self):
+        self._running = True
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def stop(self):
+        self._running = False
+        if self._server_sock:
+            try:
+                self._server_sock.close()
+            except Exception:
+                pass
+        with self._lock:
+            for c in list(self._clients):
+                try:
+                    c.close()
+                except Exception:
+                    pass
+            self._clients.clear()
+
+    @property
+    def client_count(self):
+        with self._lock:
+            return len(self._clients)
+
+    def _accept_loop(self):
+        try:
+            self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._server_sock.bind(("0.0.0.0", self.port))
+            self._server_sock.listen(10)
+            self._server_sock.settimeout(1.0)
+            while self._running:
+                try:
+                    conn, addr = self._server_sock.accept()
+                    ip = addr[0]
+                    if self._backoff_remaining(ip) > 0:
+                        conn.close()
+                        continue
+                    threading.Thread(target=self._authenticate,
+                                     args=(conn, ip), daemon=True).start()
+                except socket.timeout:
+                    continue
+                except Exception:
+                    break
+        except Exception as e:
+            debug(f"BroadcastServer error: {e}")
+
+    def _authenticate(self, conn, ip):
+        try:
+            challenge = os.urandom(32)
+            conn.sendall(_AUTH_MAGIC + challenge)
+            conn.settimeout(5.0)
+            response = b""
+            while len(response) < 32:
+                chunk = conn.recv(32 - len(response))
+                if not chunk:
+                    break
+                response += chunk
+        except Exception:
+            conn.close()
+            return
+        if len(response) != 32:
+            conn.close()
+            return
+        raw_key  = _derive_broadcast_key_raw(self.passphrase)
+        expected = hmac_mod.new(raw_key, challenge, hashlib.sha256).digest()
+        if hmac_mod.compare_digest(response, expected):
+            conn.settimeout(10.0)
+            with self._lock:
+                self._clients.append(conn)
+        else:
+            conn.close()
+            with self._sec_lock:
+                count, _ = self._auth_failures.get(ip, (0, None))
+                self._auth_failures[ip] = (count + 1, datetime.now())
+
+    def _backoff_remaining(self, ip):
+        with self._sec_lock:
+            entry = self._auth_failures.get(ip)
+            if not entry:
+                return 0
+            count, last = entry
+            delay   = _BACKOFF_DELAYS[min(count - 1, len(_BACKOFF_DELAYS) - 1)]
+            elapsed = (datetime.now() - last).total_seconds()
+            if delay - elapsed <= 0:
+                del self._auth_failures[ip]
+                return 0
+            return delay - elapsed
+
+    def send_stats(self, stats: dict):
+        if not self._clients:
+            return
+        try:
+            payload   = json.dumps(stats).encode()
+            encrypted = self._get_fernet().encrypt(payload)
+            message   = struct.pack(">I", len(encrypted)) + encrypted
+        except Exception as e:
+            debug(f"BroadcastServer encrypt error: {e}")
+            return
+        dead = []
+        with self._lock:
+            for c in list(self._clients):
+                try:
+                    c.sendall(message)
+                except Exception:
+                    dead.append(c)
+            for c in dead:
+                try:
+                    c.close()
+                except Exception:
+                    pass
+                try:
+                    self._clients.remove(c)
+                except ValueError:
+                    pass
 
 
 def load_config():
@@ -470,6 +628,18 @@ class AppState:
         self._cpu_alert_active  = False
         self._mem_alert_active  = False
         self._seen_truenas_alerts = set()
+        self.broadcast_server: BroadcastServer | None = None
+
+    def start_broadcast(self, port: int, passphrase: str):
+        if self.broadcast_server:
+            self.broadcast_server.stop()
+        self.broadcast_server = BroadcastServer(port, passphrase)
+        self.broadcast_server.start()
+
+    def stop_broadcast(self):
+        if self.broadcast_server:
+            self.broadcast_server.stop()
+            self.broadcast_server = None
 
     def add_alert(self, severity, message):
         ts    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -737,13 +907,18 @@ def draw_menu(win, state):
 # ---------------------------------------------------------------------------
 
 # Field definitions — order matters (Tab moves down the list)
+# type: "text" | "secret" | "toggle"
 _FIELDS = [
-    {"key": "host",           "label": "Host / IP",         "secret": False},
-    {"key": "api_key",        "label": "API Key",            "secret": True},
-    {"key": "username",       "label": "Username",           "secret": False},
-    {"key": "password",       "label": "Password",           "secret": True},
-    {"key": "interval",       "label": "Poll Interval (s)",  "secret": False},
-    {"key": "temp_threshold", "label": "Temp Threshold (°C)","secret": False},
+    {"key": "host",              "label": "Host / IP",          "type": "text"},
+    {"key": "api_key",           "label": "API Key",             "type": "secret"},
+    {"key": "username",          "label": "Username",            "type": "text"},
+    {"key": "password",          "label": "Password",            "type": "secret"},
+    {"key": "interval",          "label": "Poll Interval (s)",   "type": "text"},
+    {"key": "temp_threshold",    "label": "Temp Threshold (°C)", "type": "text"},
+    # Broadcast section
+    {"key": "broadcast_enabled", "label": "Enable Broadcast",    "type": "toggle"},
+    {"key": "broadcast_port",    "label": "Broadcast Port",      "type": "text"},
+    {"key": "broadcast_key",     "label": "Shared Key",          "type": "secret"},
 ]
 _SAVE_IDX = len(_FIELDS)   # index after last field = Save button
 
@@ -753,18 +928,23 @@ class SettingsForm:
 
     def __init__(self, config):
         self.values = {
-            "host":           config.get("host",           ""),
-            "api_key":        config.get("api_key",        ""),
-            "username":       config.get("username",       ""),
-            "password":       config.get("password",       ""),
-            "interval":       str(config.get("interval",       5)),
-            "temp_threshold": str(config.get("temp_threshold", 82)),
+            "host":              config.get("host",              ""),
+            "api_key":           config.get("api_key",           ""),
+            "username":          config.get("username",          ""),
+            "password":          config.get("password",          ""),
+            "interval":          str(config.get("interval",          5)),
+            "temp_threshold":    str(config.get("temp_threshold",    82)),
+            # broadcast — toggle stores a bool, text fields store strings
+            "broadcast_enabled": bool(config.get("broadcast_enabled", False)),
+            "broadcast_port":    str(config.get("broadcast_port",    BROADCAST_DEFAULT_PORT)),
+            "broadcast_key":     config.get("broadcast_key",    BROADCAST_DEFAULT_KEY),
         }
-        # Cursor position (index into value string) for each field
-        self.cursors = {k: len(str(v)) for k, v in self.values.items()}
-        self.focused = 0          # 0..len(_FIELDS)-1 = field, _SAVE_IDX = button
-        self.show_secrets = {"api_key": False, "password": False}
-        self.status   = ""        # shown after save attempt
+        # Cursor position for text/secret fields (not used for toggles)
+        self.cursors = {k: len(str(v)) for k, v in self.values.items()
+                        if not isinstance(v, bool)}
+        self.focused   = 0
+        self.show_secrets = {"api_key": False, "password": False, "broadcast_key": False}
+        self.status    = ""
         self.status_ok = True
 
     def get_config(self):
@@ -777,13 +957,22 @@ class SettingsForm:
             tt = max(40, min(96, tt))
         except ValueError:
             tt = 82
+        try:
+            bp = int(self.values.get("broadcast_port",
+                                     str(BROADCAST_DEFAULT_PORT)) or str(BROADCAST_DEFAULT_PORT))
+            bp = max(1024, min(65535, bp))
+        except ValueError:
+            bp = BROADCAST_DEFAULT_PORT
         return {
-            "host":           self.values["host"].strip(),
-            "api_key":        self.values["api_key"].strip(),
-            "username":       self.values["username"].strip(),
-            "password":       self.values["password"],
-            "interval":       iv,
-            "temp_threshold": tt,
+            "host":              self.values["host"].strip(),
+            "api_key":           self.values["api_key"].strip(),
+            "username":          self.values["username"].strip(),
+            "password":          self.values["password"],
+            "interval":          iv,
+            "temp_threshold":    tt,
+            "broadcast_enabled": self.values["broadcast_enabled"],
+            "broadcast_port":    bp,
+            "broadcast_key":     self.values["broadcast_key"].strip() or BROADCAST_DEFAULT_KEY,
         }
 
     def _total(self):
@@ -805,9 +994,20 @@ class SettingsForm:
                 self.focused = 0
             return False
 
-        # On a text field
+        # On a text/secret/toggle field
         fld = _FIELDS[self.focused]
         k   = fld["key"]
+
+        # Toggle fields: Space/Enter flips the bool; arrows navigate
+        if fld["type"] == "toggle":
+            if key in (32, curses.KEY_ENTER, 10, 13):   # Space or Enter → flip
+                self.values[k] = not self.values[k]
+            elif key in (curses.KEY_DOWN, 9):
+                self.focused = (self.focused + 1) % total
+            elif key in (curses.KEY_UP, curses.KEY_BTAB):
+                self.focused = (self.focused - 1) % total
+            return False
+
         val = self.values[k]
         cur = self.cursors[k]
 
@@ -885,34 +1085,43 @@ def draw_settings(win, state, config, form):
         lbl_attr = 0 if focused else dim
         put(win, row, box_x + 2, f"{label:<22}", lbl_attr)
 
-        # Value: mask secrets unless toggled
+        # Value rendering — differs by field type
         val = form.values[k]
-        cur = form.cursors[k]
-        if fld["secret"] and not form.show_secrets.get(k, False):
-            display = "*" * len(val)
-            disp_cur = cur    # cursor position is the same
+        if fld["type"] == "toggle":
+            input_x  = box_x + 25
+            chk_attr = sel if focused else (curses.color_pair(C_GOOD) | curses.A_BOLD if val else dim)
+            put(win, row, input_x, "[X]" if val else "[ ]", chk_attr)
+            put(win, row, input_x + 4,
+                "On" if val else "Off",
+                curses.color_pair(C_GOOD) if val else dim)
+            if focused:
+                cursor_screen_pos = None   # no text cursor on toggles
         else:
-            display  = val
-            disp_cur = cur
+            cur = form.cursors[k]
+            if fld["type"] == "secret" and not form.show_secrets.get(k, False):
+                display  = "*" * len(val)
+                disp_cur = cur
+            else:
+                display  = val
+                disp_cur = cur
 
-        # Clip long values to fit in the box; scroll so cursor is always visible
-        visible_w = INW - 2
-        if len(display) > visible_w:
-            start    = max(0, disp_cur - visible_w + 1)
-            display  = display[start:start + visible_w]
-            disp_cur = disp_cur - start
-        disp_cur = min(disp_cur, len(display))
+            # Clip long values to fit; scroll so cursor is always visible
+            visible_w = INW - 2
+            if len(display) > visible_w:
+                start    = max(0, disp_cur - visible_w + 1)
+                display  = display[start:start + visible_w]
+                disp_cur = disp_cur - start
+            disp_cur = min(disp_cur, len(display))
 
-        # Input box
-        input_x  = box_x + 25
-        box_attr = sel if focused else dim
-        put(win, row, input_x,                   "[", box_attr)
-        put(win, row, input_x + 1,
-            f"{display:<{visible_w}}", sel if focused else 0)
-        put(win, row, input_x + 1 + visible_w,   "]", box_attr)
+            input_x  = box_x + 25
+            box_attr = sel if focused else dim
+            put(win, row, input_x,                   "[", box_attr)
+            put(win, row, input_x + 1,
+                f"{display:<{visible_w}}", sel if focused else 0)
+            put(win, row, input_x + 1 + visible_w,   "]", box_attr)
 
-        if focused:
-            cursor_screen_pos = (row, input_x + 1 + disp_cur)
+            if focused:
+                cursor_screen_pos = (row, input_x + 1 + disp_cur)
 
         row += 1
 
@@ -1150,6 +1359,8 @@ def poll_loop(client, state, config, stop_event):
                 state.stats        = stats
                 state.last_updated = datetime.now()
                 state.last_error   = None
+            if state.broadcast_server:
+                state.broadcast_server.send_stats(stats)
         except Exception as e:
             with state.lock:
                 state.last_error = str(e)
