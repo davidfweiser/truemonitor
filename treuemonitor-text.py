@@ -142,6 +142,16 @@ class BroadcastServer:
         self._server_sock = None
         self._auth_failures: dict = {}
         self._sec_lock  = threading.Lock()
+        # Optional callback: on_security_event(level, ip, message)
+        self.on_security_event = None
+
+    def _emit_security(self, level: str, ip: str, message: str):
+        cb = self.on_security_event
+        if cb:
+            try:
+                cb(level, ip, message)
+            except Exception:
+                pass
 
     def _get_fernet(self):
         return Fernet(_derive_broadcast_key(self.passphrase))
@@ -241,11 +251,13 @@ class BroadcastServer:
                 pass
             with self._lock:
                 self._clients.append(conn)
+            self._emit_security("info", ip, f"Authenticated client from {ip}")
         else:
             conn.close()
             with self._sec_lock:
                 count, _ = self._auth_failures.get(ip, (0, None))
                 self._auth_failures[ip] = (count + 1, datetime.now())
+            self._emit_security("warning", ip, f"Wrong shared key from {ip}")
 
     def _backoff_remaining(self, ip):
         with self._sec_lock:
@@ -604,50 +616,6 @@ class TrueNASClient:
                             st  = member.get("status", "ONLINE")
                             disks.append({"name": disk_name,
                                           "has_error": err > 0 or st not in ("ONLINE", "")})
-                # Build vdev topology map for iOS Drive Map button
-                vdev_map = {}
-                for topo_key in ("data", "cache", "log", "spare", "special", "dedup"):
-                    vdevs = topology.get(topo_key, [])
-                    if not isinstance(vdevs, list) or not vdevs:
-                        continue
-                    vdev_list = []
-                    for vdev in vdevs:
-                        if not isinstance(vdev, dict):
-                            continue
-                        vtype   = vdev.get("type", "STRIPE")
-                        vstatus = vdev.get("status", "ONLINE")
-                        children = vdev.get("children", [])
-                        child_list = []
-                        if children:
-                            for ch in children:
-                                if not isinstance(ch, dict):
-                                    continue
-                                ch_stats = ch.get("stats", {})
-                                errs = ((ch_stats.get("read_errors", 0) or 0)
-                                        + (ch_stats.get("write_errors", 0) or 0)
-                                        + (ch_stats.get("checksum_errors", 0) or 0))
-                                child_list.append({
-                                    "name":   ch.get("disk") or ch.get("name", "?"),
-                                    "status": ch.get("status", "ONLINE"),
-                                    "errors": errs,
-                                })
-                        else:
-                            v_stats = vdev.get("stats", {})
-                            errs = ((v_stats.get("read_errors", 0) or 0)
-                                    + (v_stats.get("write_errors", 0) or 0)
-                                    + (v_stats.get("checksum_errors", 0) or 0))
-                            child_list.append({
-                                "name":   vdev.get("disk") or vdev.get("name", "?"),
-                                "status": vstatus,
-                                "errors": errs,
-                            })
-                        vdev_list.append({
-                            "type":   vtype,
-                            "status": vstatus,
-                            "disks":  child_list,
-                        })
-                    vdev_map[topo_key] = vdev_list
-
                 if total and allocated is not None:
                     pct = round(allocated / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
@@ -657,7 +625,6 @@ class TrueNASClient:
                         "total":     total,
                         "percent":   pct,
                         "disks":     disks,
-                        "topology":  vdev_map,
                     })
         except Exception as e:
             debug(f" pool error: {e}")
@@ -667,7 +634,8 @@ class TrueNASClient:
             for alert in self.get_alerts():
                 if not isinstance(alert, dict):
                     continue
-                aid   = alert.get("uuid") or alert.get("id") or str(alert)
+                aid   = (alert.get("uuid") or alert.get("id") or
+                         alert.get("klass", "") + ":" + alert.get("level", ""))
                 level = alert.get("level", "INFO").upper()
                 sev   = ("critical" if level in ("CRITICAL", "ERROR")
                           else "warning" if level == "WARNING" else "info")
@@ -694,17 +662,33 @@ class AppState:
         self.last_error   = None
         self.current_view  = "menu"
         self.unread_alerts = 0
+        self.alert_scroll  = 0  # lines scrolled up from bottom (0 = newest at top)
         self._temp_alert_active = False
         self._cpu_alert_active  = False
         self._mem_alert_active  = False
         self._seen_truenas_alerts = set()
+        self._connect_alert_times: dict = {}  # "ip:level" → last datetime
         self.broadcast_server: BroadcastServer | None = None
 
     def start_broadcast(self, port: int, passphrase: str):
         if self.broadcast_server:
             self.broadcast_server.stop()
         self.broadcast_server = BroadcastServer(port, passphrase)
+        self.broadcast_server.on_security_event = self._on_broadcast_security_event
         self.broadcast_server.start()
+
+    def _on_broadcast_security_event(self, level: str, ip: str, message: str):
+        """Rate-limited alert for broadcast auth events (runs on worker thread)."""
+        if level == "info" and not message.startswith("Authenticated"):
+            return
+        now = datetime.now()
+        key = f"{ip}:{level}"
+        with self.lock:
+            last = self._connect_alert_times.get(key)
+            if last and (now - last).total_seconds() < 300:
+                return
+            self._connect_alert_times[key] = now
+        self.add_alert(level, message)
 
     def stop_broadcast(self):
         if self.broadcast_server:
@@ -734,11 +718,11 @@ class AppState:
                 if not self._temp_alert_active:
                     self._temp_alert_active = True
                     self.add_alert("critical",
-                                   f"CPU temperature is {temp}°C (above {temp_threshold}°C threshold)!")
+                                   f"CPU temp {temp}°C exceeds threshold {temp_threshold}°C!")
             else:
                 if self._temp_alert_active:
                     self._temp_alert_active = False
-                    self.add_alert("resolved", f"CPU temperature back to normal: {temp}°C")
+                    self.add_alert("resolved", f"CPU temp back to normal: {temp}°C")
 
         cpu = stats.get("cpu_percent")
         if cpu is not None:
@@ -773,42 +757,6 @@ class AppState:
         for aid in self._seen_truenas_alerts - current_ids:
             self._seen_truenas_alerts.discard(aid)
             self.add_alert("resolved", "[TrueNAS] Alert cleared")
-
-    def load_alert_history(self):
-        """Load persisted alerts from alerts.log into the in-memory deque."""
-        if not os.path.exists(ALERT_LOG):
-            return
-        try:
-            with open(ALERT_LOG) as f:
-                lines = f.readlines()
-            sev_map = {"CRITICAL": "critical", "WARNING": "warning",
-                       "INFO": "info", "RESOLVED": "resolved"}
-            entries = []
-            for line in lines:
-                line = line.rstrip("\n")
-                if not line:
-                    continue
-                # Parse "[YYYY-MM-DD HH:MM:SS] PREFIX: message"
-                entry = {"raw": line}
-                if line.startswith("["):
-                    bracket_end = line.find("] ")
-                    if bracket_end > 0:
-                        ts_str = line[1:bracket_end]
-                        rest   = line[bracket_end + 2:]
-                        colon  = rest.find(": ")
-                        if colon > 0:
-                            prefix = rest[:colon]
-                            msg    = rest[colon + 2:]
-                            sev    = sev_map.get(prefix)
-                            if sev:
-                                entry = {"time": ts_str, "severity": sev,
-                                         "message": msg}
-                entries.append(entry)
-            with self.lock:
-                for e in entries:
-                    self.alerts.append(e)
-        except Exception:
-            pass
 
     def clear_alerts(self):
         with self.lock:
@@ -1423,7 +1371,7 @@ def draw_alerts(win, state):
     my, mx = win.getmaxyx()
     dim    = curses.color_pair(C_DIM) | curses.A_DIM
 
-    draw_hint(win, "ESC  \u2014  Back to menu     C  \u2014  Clear all alerts",
+    draw_hint(win, "ESC \u2014 Back     C \u2014 Clear     \u2191\u2193 \u2014 Scroll",
               curses.color_pair(C_ACCENT) | curses.A_BOLD)
 
     visible = my - CONTENT_ROW - 2
@@ -1434,8 +1382,16 @@ def draw_alerts(win, state):
         put(win, CONTENT_ROW + 2, 4, "No alerts.", dim)
         return
 
-    display = list(reversed(alert_list[-visible:]
-                             if len(alert_list) > visible else alert_list))
+    total = len(alert_list)
+    # Clamp scroll so we can't scroll past the oldest alert
+    state.alert_scroll = max(0, min(state.alert_scroll, max(0, total - visible)))
+    scroll = state.alert_scroll
+
+    # alert_list is oldest→newest; show newest at top with scroll offset
+    # scroll=0 → last `visible` entries; scroll=N → entries shifted N older
+    start = max(0, total - visible - scroll)
+    end   = max(0, total - scroll)
+    display = list(reversed(alert_list[start:end]))
 
     for i, a in enumerate(display):
         row = CONTENT_ROW + i
@@ -1451,6 +1407,13 @@ def draw_alerts(win, state):
             put(win, row, len(ts_s) + len(label) + 2, a.get("message", ""), 0)
         elif "raw" in a:
             put(win, row, 1, a["raw"], dim)
+
+    # Scroll indicator
+    if total > visible:
+        shown_from = total - end + 1
+        shown_to   = total - start
+        put(win, my - 2, mx - 24,
+            f" {shown_from}-{shown_to} of {total} ", dim)
 
 
 # ---------------------------------------------------------------------------
@@ -1603,14 +1566,21 @@ def run_ui(stdscr, conn, state, config):
                 with state.lock:
                     state.current_view  = "alerts"
                     state.unread_alerts = 0
+                state.alert_scroll = 0
             elif key == ord("3"):
                 state.current_view = "monitor"
             elif key == 27:   # ESC from any view → menu
                 state.current_view = "menu"
 
             # Alerts-specific
-            if view == "alerts" and key in (ord("c"), ord("C")):
-                state.clear_alerts()
+            if view == "alerts":
+                if key in (ord("c"), ord("C")):
+                    state.clear_alerts()
+                    state.alert_scroll = 0
+                elif key == curses.KEY_UP:
+                    state.alert_scroll += 1
+                elif key == curses.KEY_DOWN:
+                    state.alert_scroll = max(0, state.alert_scroll - 1)
 
         # ── Render ──────────────────────────────────────────────────────
         stdscr.erase()
@@ -1702,7 +1672,17 @@ def main():
         client = TrueNASClient(host=config.get("host", "localhost"))
 
     state      = AppState()
-    state.load_alert_history()
+
+    # Load persisted alert history from log file
+    try:
+        if os.path.exists(ALERT_LOG):
+            with open(ALERT_LOG) as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line:
+                        state.alerts.append({"raw": line})
+    except Exception:
+        pass
 
     # Auto-start broadcast server if it was enabled in the saved config
     if config.get("broadcast_enabled"):
