@@ -264,6 +264,8 @@ final class DataModule: ObservableObject {
         case .connecting:
             connectionState = .connecting
         case .connected:
+            reconnectTask?.cancel()
+            reconnectTask = nil
             connectionState = .connected
             errorMessage = nil
             lastDataReceived = Date()

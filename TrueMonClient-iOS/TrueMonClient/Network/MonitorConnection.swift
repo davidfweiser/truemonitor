@@ -65,8 +65,10 @@ final class MonitorConnection {
             case .ready:
                 // Don't report .connected yet — wait for auth to complete
                 self.readAuthMagic()
-            case .waiting(let error):
-                self.onStateChange?(.failed("Waiting: \(error.localizedDescription)"))
+            case .waiting(_):
+                // NWConnection retries automatically when the path recovers.
+                // Treat as still-connecting so we don't schedule a redundant reconnect.
+                self.onStateChange?(.connecting)
             case .failed(let error):
                 self.onStateChange?(.failed(error.localizedDescription))
                 self.onError?(error.localizedDescription)
