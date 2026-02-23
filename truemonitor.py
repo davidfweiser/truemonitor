@@ -454,7 +454,7 @@ class TrueNASClient:
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode    = ssl.CERT_NONE
         ws = _websocket.WebSocket(sslopt={"context": ssl_ctx})
-        ws.settimeout(10)
+        ws.settimeout(30)
         ws.connect(ws_url)
         if self.api_key:
             ok = self._rpc_on(ws, "auth.login_with_api_key", [self.api_key])
@@ -487,6 +487,8 @@ class TrueNASClient:
                 if self._ws is None:
                     self._connect()
                 return self._rpc_on(self._ws, method, params)
+            except RuntimeError:
+                raise  # RPC application error — don't reconnect
             except Exception:
                 self._ws = None
                 if attempt == 0:
@@ -562,11 +564,13 @@ class TrueNASClient:
         last_err = None
         for i, (method, payload) in enumerate(_attempts()):
             try:
+                debug(f" reporting attempt {i}: {method}")
                 result = self._call(method, [payload])
                 self._working_report_format = i
-                debug(f"reporting OK via {method} (cached as #{i})")
+                debug(f" reporting OK via {method} (cached as #{i})")
                 return result
             except Exception as e:
+                debug(f" reporting attempt {i} failed: {e}")
                 last_err = e
                 continue
 
@@ -2266,7 +2270,7 @@ class TrueMonitorApp:
                 info = self.client.test_connection()
                 self.root.after(0, lambda: self._connected(info))
             except Exception as e:
-                self.root.after(0, lambda: self._conn_error(str(e)))
+                self.root.after(0, lambda msg=str(e): self._conn_error(msg))
 
         threading.Thread(target=_test, daemon=True).start()
 
