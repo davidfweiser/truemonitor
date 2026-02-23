@@ -1636,9 +1636,9 @@ class TrueMonitorApp:
         self.alert_count_lbl.pack(side=tk.LEFT, padx=(12, 0))
 
         clear_btn = tk.Button(
-            hdr, text="Clear All", bg=COLORS["card"], fg=COLORS["text"],
+            hdr, text="Clear All", bg=COLORS["card"], fg="#000000",
             activebackground=COLORS["card_border"],
-            activeforeground=COLORS["text"],
+            activeforeground="#000000",
             font=("Helvetica", self._sf(10)), relief="flat", padx=14, pady=4,
             command=self._clear_alerts)
         clear_btn.pack(side=tk.RIGHT)
