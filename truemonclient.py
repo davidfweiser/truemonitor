@@ -320,10 +320,15 @@ class TrueMonClientApp:
         self.root.update_idletasks()
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
-        w = min(900, int(sw * 0.90))
-        h = min(700, int(sh * 0.88))
+        import sys as _sys
+        if _sys.platform == "darwin":
+            w = min(675, int(sw * 0.675))
+            h = min(525, int(sh * 0.66))
+        else:
+            w = min(900, int(sw * 0.90))
+            h = min(700, int(sh * 0.88))
         self.root.geometry(f"{w}x{h}")
-        self.root.minsize(min(660, sw - 80), min(480, sh - 80))
+        self.root.minsize(min(560, sw - 80), min(400, sh - 80))
         self.root.configure(bg=COLORS["bg"])
 
         self.monitor_client = None
