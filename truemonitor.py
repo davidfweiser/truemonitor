@@ -1398,9 +1398,12 @@ class TrueMonitorApp:
             ttk.Label(title_row, text=f"Pool: {name}", style="CardTitle.TLabel").pack(
                 side=tk.LEFT)
             topo = pool.get("topology", {})
+            import sys as _sys
+            _map_bg = "#ffffff" if _sys.platform == "win32" else COLORS["button"]
+            _map_hover = "#e0e0e0" if _sys.platform == "win32" else COLORS["button_hover"]
             map_btn = tk.Button(
-                title_row, text="Drive Map", bg=COLORS["button"],
-                fg="#000000", activebackground=COLORS["button_hover"],
+                title_row, text="Drive Map", bg=_map_bg,
+                fg="#000000", activebackground=_map_hover,
                 activeforeground="#000000",
                 font=("Helvetica", self._sf(8)), relief="flat", padx=8, pady=2,
                 command=lambda n=name, t=topo: self._show_drive_map(n, t),
@@ -1635,9 +1638,12 @@ class TrueMonitorApp:
             font=("Helvetica", self._sf(10)))
         self.alert_count_lbl.pack(side=tk.LEFT, padx=(12, 0))
 
+        import sys as _sys
+        _clr_bg = "#ffffff" if _sys.platform == "win32" else COLORS["card"]
+        _clr_hover = "#e0e0e0" if _sys.platform == "win32" else COLORS["card_border"]
         clear_btn = tk.Button(
-            hdr, text="Clear All", bg=COLORS["card"], fg="#000000",
-            activebackground=COLORS["card_border"],
+            hdr, text="Clear All", bg=_clr_bg, fg="#000000",
+            activebackground=_clr_hover,
             activeforeground="#000000",
             font=("Helvetica", self._sf(10)), relief="flat", padx=14, pady=4,
             command=self._clear_alerts)
