@@ -524,34 +524,22 @@ class TrueNASClient:
         start = now - timedelta(seconds=120)
 
         # WebSocket JSON-RPC format: params = [graphs_list, query_dict]
-        # (two separate positional args, not a single wrapped dict)
+        # (two separate positional args — confirmed from api.truenas.com/v25.10)
         def _attempts():
+            query_iso = {
+                "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
+                "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
+                "aggregate": True,
+            }
             return [
-                # Format 1: graphs + ISO time range (standard WebSocket format)
-                ("reporting.get_data", [
-                    graphs,
-                    {
-                        "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "aggregate": True,
-                    },
-                ]),
-                # Format 2: graphs + unit-based query
-                ("reporting.get_data", [
-                    graphs,
-                    {"unit": "MINUTE", "page": 0, "aggregate": True},
-                ]),
-                # Format 3: graphs only
-                ("reporting.get_data", [graphs]),
-                # Format 4: graphs + integer timestamps
-                ("reporting.get_data", [
-                    graphs,
-                    {
-                        "start": int(start.timestamp()),
-                        "end":   int(now.timestamp()),
-                        "aggregate": True,
-                    },
-                ]),
+                # reporting.get_data — two-arg WebSocket format
+                ("reporting.get_data",        [graphs, query_iso]),
+                # reporting.netdata_get_data — same signature (underscore, not dot)
+                ("reporting.netdata_get_data", [graphs, query_iso]),
+                # unit-based query fallback
+                ("reporting.get_data",        [graphs, {"unit": "HOUR", "page": 1, "aggregate": True}]),
+                # graphs only
+                ("reporting.get_data",        [graphs]),
             ]
 
         if self._working_report_format is not None:

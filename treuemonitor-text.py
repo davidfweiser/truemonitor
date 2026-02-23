@@ -509,28 +509,16 @@ class TrueNASClient:
         start = now - timedelta(seconds=120)
 
         def _attempts():
+            query_iso = {
+                "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
+                "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
+                "aggregate": True,
+            }
             return [
-                ("reporting.get_data", [
-                    graphs,
-                    {
-                        "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "aggregate": True,
-                    },
-                ]),
-                ("reporting.get_data", [
-                    graphs,
-                    {"unit": "MINUTE", "page": 0, "aggregate": True},
-                ]),
-                ("reporting.get_data", [graphs]),
-                ("reporting.get_data", [
-                    graphs,
-                    {
-                        "start": int(start.timestamp()),
-                        "end":   int(now.timestamp()),
-                        "aggregate": True,
-                    },
-                ]),
+                ("reporting.get_data",        [graphs, query_iso]),
+                ("reporting.netdata_get_data", [graphs, query_iso]),
+                ("reporting.get_data",        [graphs, {"unit": "HOUR", "page": 1, "aggregate": True}]),
+                ("reporting.get_data",        [graphs]),
             ]
 
         if self._working_report_format is not None:
