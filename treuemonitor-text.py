@@ -510,47 +510,42 @@ class TrueNASClient:
 
         def _attempts():
             return [
-                ("reporting.netdata.get_data", {
-                    "graphs": graphs,
-                    "reporting_query": {
+                ("reporting.get_data", [
+                    graphs,
+                    {
                         "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
                         "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
                         "aggregate": True,
                     },
-                }),
-                ("reporting.get_data", {
-                    "graphs": graphs,
-                    "reporting_query": {
-                        "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "aggregate": True,
-                    },
-                }),
-                ("reporting.get_data", {
-                    "graphs": graphs,
-                    "reporting_query": {
+                ]),
+                ("reporting.get_data", [
+                    graphs,
+                    {"unit": "MINUTE", "page": 0, "aggregate": True},
+                ]),
+                ("reporting.get_data", [graphs]),
+                ("reporting.get_data", [
+                    graphs,
+                    {
                         "start": int(start.timestamp()),
                         "end":   int(now.timestamp()),
                         "aggregate": True,
                     },
-                }),
-                ("reporting.get_data",         {"graphs": graphs}),
-                ("reporting.netdata.get_data", {"graphs": graphs}),
+                ]),
             ]
 
         if self._working_report_format is not None:
             idx = self._working_report_format
             try:
-                method, payload = _attempts()[idx]
-                return self._call(method, [payload])
+                method, params = _attempts()[idx]
+                return self._call(method, params)
             except Exception:
                 self._working_report_format = None
 
         last_err = None
-        for i, (method, payload) in enumerate(_attempts()):
+        for i, (method, params) in enumerate(_attempts()):
             try:
                 debug(f" reporting attempt {i}: {method}")
-                result = self._call(method, [payload])
+                result = self._call(method, params)
                 self._working_report_format = i
                 debug(f" reporting OK via {method} (cached as #{i})")
                 return result

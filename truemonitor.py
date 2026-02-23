@@ -523,49 +523,50 @@ class TrueNASClient:
         now   = datetime.now(timezone.utc)
         start = now - timedelta(seconds=120)
 
+        # WebSocket JSON-RPC format: params = [graphs_list, query_dict]
+        # (two separate positional args, not a single wrapped dict)
         def _attempts():
             return [
-                ("reporting.netdata.get_data", {
-                    "graphs": graphs,
-                    "reporting_query": {
+                # Format 1: graphs + ISO time range (standard WebSocket format)
+                ("reporting.get_data", [
+                    graphs,
+                    {
                         "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
                         "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
                         "aggregate": True,
                     },
-                }),
-                ("reporting.get_data", {
-                    "graphs": graphs,
-                    "reporting_query": {
-                        "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "end":   now.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "aggregate": True,
-                    },
-                }),
-                ("reporting.get_data", {
-                    "graphs": graphs,
-                    "reporting_query": {
+                ]),
+                # Format 2: graphs + unit-based query
+                ("reporting.get_data", [
+                    graphs,
+                    {"unit": "MINUTE", "page": 0, "aggregate": True},
+                ]),
+                # Format 3: graphs only
+                ("reporting.get_data", [graphs]),
+                # Format 4: graphs + integer timestamps
+                ("reporting.get_data", [
+                    graphs,
+                    {
                         "start": int(start.timestamp()),
                         "end":   int(now.timestamp()),
                         "aggregate": True,
                     },
-                }),
-                ("reporting.get_data",         {"graphs": graphs}),
-                ("reporting.netdata.get_data", {"graphs": graphs}),
+                ]),
             ]
 
         if self._working_report_format is not None:
             idx = self._working_report_format
             try:
-                method, payload = _attempts()[idx]
-                return self._call(method, [payload])
+                method, params = _attempts()[idx]
+                return self._call(method, params)
             except Exception:
                 self._working_report_format = None
 
         last_err = None
-        for i, (method, payload) in enumerate(_attempts()):
+        for i, (method, params) in enumerate(_attempts()):
             try:
                 debug(f" reporting attempt {i}: {method}")
-                result = self._call(method, [payload])
+                result = self._call(method, params)
                 self._working_report_format = i
                 debug(f" reporting OK via {method} (cached as #{i})")
                 return result
@@ -1439,12 +1440,11 @@ class TrueMonitorApp:
             disks = pool.get("disks", [])
             for disk in disks:
                 color = COLORS["critical"] if disk["has_error"] else COLORS["good"]
-                rect = tk.Frame(
+                rect = tk.Canvas(
                     disk_frame, bg=color, width=12, height=24,
                     highlightbackground=COLORS["card_border"],
-                    highlightthickness=1,
+                    highlightthickness=1, bd=0,
                 )
-                rect.pack_propagate(False)
                 rect.pack(side=tk.LEFT, padx=2)
                 _Tooltip(rect, disk["name"])
                 disk_rects.append(rect)
