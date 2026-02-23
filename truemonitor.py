@@ -1428,12 +1428,11 @@ class TrueMonitorApp:
             disks = pool.get("disks", [])
             for disk in disks:
                 color = COLORS["critical"] if disk["has_error"] else COLORS["good"]
-                rect = tk.Canvas(
-                    disk_frame, bg=color, width=12, height=24,
-                    highlightbackground=COLORS["card_border"],
-                    highlightthickness=1, bd=0,
+                rect = tk.Label(
+                    disk_frame, text="\u25cf", fg=color,
+                    bg=COLORS["card"], font=("Helvetica", 14),
                 )
-                rect.pack(side=tk.LEFT, padx=2)
+                rect.pack(side=tk.LEFT, padx=1)
                 _Tooltip(rect, disk["name"])
                 disk_rects.append(rect)
 
@@ -2479,7 +2478,7 @@ class TrueMonitorApp:
                 for i, rect in enumerate(card.get("disk_rects", [])):
                     if i < len(disks):
                         disk_col = COLORS["critical"] if disks[i]["has_error"] else COLORS["good"]
-                        rect.config(bg=disk_col)
+                        rect.config(fg=disk_col)
 
                 # Update stored topology for drive map button
                 topo = pool.get("topology", {})
