@@ -232,6 +232,9 @@ final class DataModule: ObservableObject {
     }
 
     private func handleStats(_ newStats: ServerStats) {
+        if newStats.clearAlertsAt != nil {
+            clearAlerts(fromServer: true)
+        }
         lastDataReceived = Date()
         stats = newStats
 
@@ -389,10 +392,13 @@ final class DataModule: ObservableObject {
         notificationService.postAlert(alert)
     }
 
-    func clearAlerts() {
+    func clearAlerts(fromServer: Bool = false) {
         alerts.removeAll()
         lastAlertTimes.removeAll()
         saveAlerts()
+        if !fromServer {
+            connection.sendCommand(["cmd": "clear_alerts"])
+        }
     }
 
     // MARK: - Persistence

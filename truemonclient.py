@@ -143,9 +143,23 @@ class MonitorClient:
         self._running = False
         self._sock = None
         self._thread = None
+        self._send_lock = threading.Lock()
 
     def _get_fernet(self):
         return Fernet(_derive_broadcast_key(self.passphrase))
+
+    def send_command(self, cmd: dict):
+        """Send a plain-JSON command frame to the server (thread-safe)."""
+        sock = self._sock
+        if not sock:
+            return
+        try:
+            payload = json.dumps(cmd).encode()
+            message = struct.pack(">I", len(payload)) + payload
+            with self._send_lock:
+                sock.sendall(message)
+        except Exception:
+            pass
 
     def start(self):
         self._running = True
@@ -1090,7 +1104,7 @@ class TrueMonClientApp:
                 pass
         threading.Thread(target=_sound, daemon=True).start()
 
-    def _clear_alerts(self):
+    def _clear_alerts(self, from_server: bool = False):
         self.alerts.clear()
         self.alert_listbox.config(state=tk.NORMAL)
         self.alert_listbox.delete("1.0", tk.END)
@@ -1102,6 +1116,8 @@ class TrueMonClientApp:
                 f.write("")
         except Exception:
             pass
+        if not from_server:
+            self.monitor_client.send_command({"cmd": "clear_alerts"})
 
     def _check_alerts(self, stats):
         """Check stats and fire threshold alerts."""
@@ -1472,6 +1488,9 @@ class TrueMonClientApp:
 
     # --- UI refresh ---
     def _refresh(self, s):
+        if s.get("clear_alerts_at"):
+            self._clear_alerts(from_server=True)
+
         now = datetime.now().strftime("%H:%M:%S")
         self.footer.config(text=f"Last updated: {now}", fg=COLORS["text_dim"])
 

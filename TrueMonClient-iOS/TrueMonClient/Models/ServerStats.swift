@@ -16,6 +16,7 @@ struct ServerStats: Codable {
     let loadavg: [Double]?
     let pools: [PoolInfo]?
     let systemAlerts: [SystemAlert]?
+    let clearAlertsAt: Double?
 
     enum CodingKeys: String, CodingKey {
         case cpuPercent   = "cpu_percent"
@@ -27,6 +28,7 @@ struct ServerStats: Codable {
         case netTx        = "net_tx"
         case netIface     = "net_iface"
         case systemAlerts = "system_alerts"
+        case clearAlertsAt = "clear_alerts_at"
         case hostname, version, uptime, loadavg, pools
     }
 }

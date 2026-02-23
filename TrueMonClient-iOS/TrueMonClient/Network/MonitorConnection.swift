@@ -91,6 +91,18 @@ final class MonitorConnection {
         connection = nil
     }
 
+    /// Send a plain-JSON command frame to the server (e.g. clear_alerts).
+    /// The connection is already authenticated via HMAC challenge-response,
+    /// so plain JSON over the established socket is sufficient.
+    func sendCommand(_ cmd: [String: Any]) {
+        guard isRunning, let conn = connection else { return }
+        guard let payload = try? JSONSerialization.data(withJSONObject: cmd) else { return }
+        var length = UInt32(payload.count).bigEndian
+        var header = Data(bytes: &length, count: 4)
+        header.append(payload)
+        conn.send(content: header, completion: .idempotent)
+    }
+
     // MARK: - Auth Handshake
 
     /// Step 1: read the 13-byte magic "TRUEMON_AUTH\n".
@@ -170,7 +182,6 @@ final class MonitorConnection {
 
             if let error = error {
                 self.onError?(error.localizedDescription)
-                self.onStateChange?(.failed(error.localizedDescription))
                 return
             }
             if isComplete && (data == nil || data!.isEmpty) {
@@ -201,7 +212,6 @@ final class MonitorConnection {
 
             if let error = error {
                 self.onError?(error.localizedDescription)
-                self.onStateChange?(.failed(error.localizedDescription))
                 return
             }
             if isComplete && (data == nil || data!.isEmpty) {

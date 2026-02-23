@@ -143,6 +143,12 @@ class BroadcastServer:
         # level: "info" | "warning" | "critical"
         self.on_security_event = None
 
+        # Broadcast a clear-alerts signal on next send_stats call.
+        self._clear_alerts_at: float = 0.0
+        # Optional callback: on_client_clear_alerts() — called when a client
+        # sends a clear_alerts command so the server can clear its own display.
+        self.on_client_clear_alerts = None
+
     def _get_fernet(self):
         return Fernet(_derive_broadcast_key(self.passphrase))
 
@@ -256,6 +262,12 @@ class BroadcastServer:
                 pass
             with self._lock:
                 self._clients.append(conn)
+            # Read commands sent back from this client (e.g. clear_alerts).
+            threading.Thread(
+                target=self._read_client_commands,
+                args=(conn, ip),
+                daemon=True,
+            ).start()
         else:
             # Wrong key
             self._record_failure(ip, conn)
@@ -294,11 +306,75 @@ class BroadcastServer:
             self.on_security_event(level, ip, message)
 
     # ------------------------------------------------------------------
+    # Client command back-channel
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _recvn_from(conn, n: int):
+        """Receive exactly n bytes from conn; return None on EOF/error, re-raise timeout."""
+        data = b""
+        while len(data) < n:
+            try:
+                chunk = conn.recv(n - len(data))
+                if not chunk:
+                    return None
+                data += chunk
+            except socket.timeout:
+                raise
+            except Exception:
+                return None
+        return data
+
+    def _read_client_commands(self, conn: socket.socket, ip: str):
+        """Read plain-JSON command frames sent back from an authenticated client."""
+        debug(f"BroadcastServer: command reader started for {ip}")
+        while self._running:
+            try:
+                header = self._recvn_from(conn, 4)
+                if header is None:
+                    break
+                length = struct.unpack(">I", header)[0]
+                if length == 0 or length > 65_536:
+                    debug(f"BroadcastServer: bad command frame length {length} from {ip}")
+                    break
+                data = self._recvn_from(conn, length)
+                if data is None:
+                    break
+                try:
+                    cmd = json.loads(data.decode())
+                except Exception as e:
+                    debug(f"BroadcastServer: command parse error from {ip}: {e}")
+                    break
+                debug(f"BroadcastServer: received command {cmd} from {ip}")
+                if cmd.get("cmd") == "clear_alerts":
+                    self.request_clear_alerts()
+                    if self.on_client_clear_alerts:
+                        try:
+                            self.on_client_clear_alerts()
+                        except Exception:
+                            pass
+            except socket.timeout:
+                continue  # No command yet — keep waiting
+            except Exception:
+                break
+        debug(f"BroadcastServer: command reader ended for {ip}")
+
+    def request_clear_alerts(self):
+        """Schedule a clear_alerts_at timestamp in the next broadcast."""
+        self._clear_alerts_at = time.time()
+
+    # ------------------------------------------------------------------
     # Stats broadcast
     # ------------------------------------------------------------------
 
     def send_stats(self, stats: dict):
         """Encrypt stats dict and send to all authenticated clients."""
+        clear_at = self._clear_alerts_at
+        if clear_at:
+            self._clear_alerts_at = 0.0
+            stats = dict(stats)
+            stats["clear_alerts_at"] = clear_at
+            debug(f"BroadcastServer: broadcasting clear_alerts_at to {len(self._clients)} client(s)")
         if not self._clients:
             return
         try:
@@ -1692,18 +1768,28 @@ class TrueMonitorApp:
         threading.Thread(target=_sound, daemon=True).start()
 
     def _clear_alerts(self):
+        """User-initiated clear: clears locally and tells all clients to clear."""
+        self._do_clear_alerts_local()
+        if self.broadcast_server:
+            self.broadcast_server.request_clear_alerts()
+
+    def _do_clear_alerts_local(self):
+        """Clear alerts display and log without triggering a broadcast."""
         self.alerts.clear()
         self.alert_listbox.config(state=tk.NORMAL)
         self.alert_listbox.delete("1.0", tk.END)
         self.alert_listbox.config(state=tk.DISABLED)
         self.alert_count_lbl.config(text="0 alerts")
         self.notebook.tab(1, text="  Alerts  ")
-        # Clear the log file
         try:
             with open(ALERT_LOG, "w") as f:
                 f.write("")
         except Exception:
             pass
+
+    def _on_client_clear_alerts(self):
+        """Called (on worker thread) when a client sends clear_alerts command."""
+        self.root.after(0, self._do_clear_alerts_local)
 
     def _check_alerts(self, stats):
         """Check stats and fire alerts as needed."""
@@ -2061,6 +2147,7 @@ class TrueMonitorApp:
             key = self.config.get("broadcast_key", BROADCAST_DEFAULT_KEY)
             self.broadcast_server = BroadcastServer(port, key)
             self.broadcast_server.on_security_event = self._on_broadcast_security_event
+            self.broadcast_server.on_client_clear_alerts = self._on_client_clear_alerts
             self.broadcast_server.start()
         self._update_broadcast_status()
 
