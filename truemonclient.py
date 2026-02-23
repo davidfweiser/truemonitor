@@ -317,6 +317,7 @@ class TrueMonClientApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TrueMonClient")
+        self.config = self._load_config()
         self.root.update_idletasks()
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -327,7 +328,14 @@ class TrueMonClientApp:
         else:
             self._base_w = min(900, int(sw * 0.90))
             self._base_h = min(700, int(sh * 0.88))
-        self.root.geometry(f"{self._base_w}x{self._base_h}")
+        saved_geo = self.config.get("window_geometry")
+        if saved_geo:
+            try:
+                self.root.geometry(saved_geo)
+            except Exception:
+                self.root.geometry(f"{self._base_w}x{self._base_h}")
+        else:
+            self.root.geometry(f"{self._base_w}x{self._base_h}")
         self.root.minsize(min(560, sw - 80), min(400, sh - 80))
         self.root.configure(bg=COLORS["bg"])
 
@@ -335,7 +343,6 @@ class TrueMonClientApp:
         self.connected = False
         self.demo_mode = False
         self.poll_thread = None
-        self.config = self._load_config()
         self.net_history_rx = []
         self.net_history_tx = []
         self.temp_history = []
@@ -1700,6 +1707,8 @@ class TrueMonClientApp:
             time.sleep(2)
 
     def _on_close(self):
+        self.config["window_geometry"] = self.root.geometry()
+        self._save_config()
         self.demo_mode = False
         if self.monitor_client:
             self.monitor_client.stop()
