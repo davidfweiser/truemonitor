@@ -53,13 +53,12 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
+import ssl
 try:
-    import requests
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    import websocket as _websocket
 except ImportError:
-    print("ERROR: 'requests' package is required. Install it with:")
-    print("  pip install requests")
+    print("ERROR: 'websocket-client' package is required. Install it with:")
+    print("  pip install websocket-client")
     raise SystemExit(1)
 
 APP_VERSION = "0.5"
@@ -417,64 +416,91 @@ def _bar(pct, width=20):
 
 
 # ---------------------------------------------------------------------------
-# TrueNAS REST API client
+# TrueNAS WebSocket JSON-RPC 2.0 client
 # ---------------------------------------------------------------------------
 
 class TrueNASClient:
     def __init__(self, host, api_key="", username="", password=""):
-        self.base_url = host.rstrip("/")
-        if not self.base_url.startswith("http"):
-            self.base_url = f"https://{self.base_url}"
+        h = host.rstrip("/")
+        for prefix in ("https://", "http://"):
+            if h.startswith(prefix):
+                h = h[len(prefix):]
+        self.host     = h
         self.api_key  = api_key
         self.username = username
         self.password = password
-        self.session  = requests.Session()
-        self.session.verify = False
+        self._ws      = None
+        self._id      = 0
         self._working_report_format = None
         self._working_iface = None
 
-    def _headers(self):
-        h = {"Content-Type": "application/json"}
+    def _connect(self):
+        ws_url  = f"wss://{self.host}/api/current"
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode    = ssl.CERT_NONE
+        ws = _websocket.WebSocket(sslopt={"context": ssl_ctx})
+        ws.settimeout(10)
+        ws.connect(ws_url)
         if self.api_key:
-            h["Authorization"] = f"Bearer {self.api_key}"
-        return h
+            ok = self._rpc_on(ws, "auth.login_with_api_key", [self.api_key])
+        else:
+            ok = self._rpc_on(ws, "auth.login", [self.username, self.password])
+        if not ok:
+            ws.close()
+            raise RuntimeError("Authentication failed")
+        self._ws = ws
 
-    def _auth(self):
-        if not self.api_key and self.username and self.password:
-            return (self.username, self.password)
-        return None
+    def _rpc_on(self, ws, method, params=None):
+        self._id += 1
+        msg_id = self._id
+        req = {"jsonrpc": "2.0", "id": msg_id, "method": method,
+               "params": params if params is not None else []}
+        ws.send(json.dumps(req))
+        while True:
+            raw  = ws.recv()
+            resp = json.loads(raw)
+            if resp.get("id") != msg_id:
+                continue  # skip notifications / other messages
+            if "error" in resp:
+                err = resp["error"]
+                raise RuntimeError(f"RPC error: {err.get('message', err)}")
+            return resp.get("result")
 
-    def _get(self, endpoint):
-        url = f"{self.base_url}/api/v2.0/{endpoint}"
-        r = self.session.get(url, headers=self._headers(), auth=self._auth(), timeout=10)
-        r.raise_for_status()
-        return r.json()
+    def _call(self, method, params=None):
+        for attempt in range(2):
+            try:
+                if self._ws is None:
+                    self._connect()
+                return self._rpc_on(self._ws, method, params)
+            except Exception:
+                self._ws = None
+                if attempt == 0:
+                    continue
+                raise
 
-    def _post(self, endpoint, payload):
-        url = f"{self.base_url}/api/v2.0/{endpoint}"
-        r = self.session.post(
-            url, headers=self._headers(), auth=self._auth(),
-            json=payload, timeout=10,
-        )
-        if not r.ok:
-            debug(f"POST {endpoint} => {r.status_code}: {r.text[:500]}")
-        r.raise_for_status()
-        return r.json()
+    def close(self):
+        if self._ws:
+            try:
+                self._ws.close()
+            except Exception:
+                pass
+            self._ws = None
 
     def test_connection(self):
-        return self._get("system/info")
+        return self._call("system.info")
 
     def get_system_info(self):
-        return self._get("system/info")
+        return self._call("system.info")
 
     def get_interfaces(self):
-        return self._get("interface")
+        return self._call("interface.query")
 
     def get_alerts(self):
-        return self._get("alert/list")
+        return self._call("alert.list")
 
     def get_pools(self):
-        return self._get("pool")
+        return self._call("pool.query")
 
     def get_reporting_data(self, graphs):
         now   = datetime.now(timezone.utc)
@@ -482,7 +508,7 @@ class TrueNASClient:
 
         def _attempts():
             return [
-                ("reporting/netdata/get_data", {
+                ("reporting.netdata.get_data", {
                     "graphs": graphs,
                     "reporting_query": {
                         "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -490,7 +516,7 @@ class TrueNASClient:
                         "aggregate": True,
                     },
                 }),
-                ("reporting/get_data", {
+                ("reporting.get_data", {
                     "graphs": graphs,
                     "reporting_query": {
                         "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -498,7 +524,7 @@ class TrueNASClient:
                         "aggregate": True,
                     },
                 }),
-                ("reporting/get_data", {
+                ("reporting.get_data", {
                     "graphs": graphs,
                     "reporting_query": {
                         "start": int(start.timestamp()),
@@ -506,22 +532,22 @@ class TrueNASClient:
                         "aggregate": True,
                     },
                 }),
-                ("reporting/get_data",         {"graphs": graphs}),
-                ("reporting/netdata/get_data", {"graphs": graphs}),
+                ("reporting.get_data",         {"graphs": graphs}),
+                ("reporting.netdata.get_data", {"graphs": graphs}),
             ]
 
         if self._working_report_format is not None:
             idx = self._working_report_format
             try:
-                ep, pl = _attempts()[idx]
-                return self._post(ep, pl)
+                method, payload = _attempts()[idx]
+                return self._call(method, [payload])
             except Exception:
                 self._working_report_format = None
 
         last_err = None
-        for i, (ep, pl) in enumerate(_attempts()):
+        for i, (method, payload) in enumerate(_attempts()):
             try:
-                result = self._post(ep, pl)
+                result = self._call(method, [payload])
                 self._working_report_format = i
                 return result
             except Exception as e:
