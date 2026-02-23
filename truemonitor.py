@@ -34,7 +34,7 @@ except ImportError:
     print("  pip install requests")
     raise SystemExit(1)
 
-APP_VERSION = "0.4"
+APP_VERSION = "0.5"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
