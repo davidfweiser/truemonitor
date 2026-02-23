@@ -795,10 +795,10 @@ class TrueMonClientApp:
             disks = pool.get("disks", [])
             for disk in disks:
                 color = COLORS["critical"] if disk["has_error"] else COLORS["good"]
-                rect = tk.Label(
-                    disk_frame, text="\u25ae", fg=color,
-                    bg=COLORS["card"], font=("Helvetica", self._sf(16)),
-                )
+                img = tk.PhotoImage(width=14, height=20)
+                img.put(color, to=(0, 0, 14, 20))
+                rect = tk.Label(disk_frame, image=img, bd=0, highlightthickness=0)
+                rect._img = img  # prevent garbage collection
                 rect.pack(side=tk.LEFT, padx=2)
                 _Tooltip(rect, disk["name"])
                 disk_rects.append(rect)
@@ -1602,7 +1602,7 @@ class TrueMonClientApp:
                 for i, rect in enumerate(card.get("disk_rects", [])):
                     if i < len(disks):
                         disk_col = COLORS["critical"] if disks[i]["has_error"] else COLORS["good"]
-                        rect.config(fg=disk_col)
+                        rect._img.put(disk_col, to=(0, 0, 14, 20))
 
                 topo = pool.get("topology", {})
                 if topo:
