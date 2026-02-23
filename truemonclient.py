@@ -322,12 +322,12 @@ class TrueMonClientApp:
         sh = self.root.winfo_screenheight()
         import sys as _sys
         if _sys.platform == "darwin":
-            w = min(675, int(sw * 0.675))
-            h = min(525, int(sh * 0.66))
+            self._base_w = min(675, int(sw * 0.675))
+            self._base_h = min(525, int(sh * 0.66))
         else:
-            w = min(900, int(sw * 0.90))
-            h = min(700, int(sh * 0.88))
-        self.root.geometry(f"{w}x{h}")
+            self._base_w = min(900, int(sw * 0.90))
+            self._base_h = min(700, int(sh * 0.88))
+        self.root.geometry(f"{self._base_w}x{self._base_h}")
         self.root.minsize(min(560, sw - 80), min(400, sh - 80))
         self.root.configure(bg=COLORS["bg"])
 
@@ -819,15 +819,14 @@ class TrueMonClientApp:
         sh = self.root.winfo_screenheight()
         sw = self.root.winfo_screenwidth()
         max_h = int(sh * 0.92)
-        base_h = min(640, int(sh * 0.60))
-        new_height = min(base_h + pool_rows_total * 200, max_h)
+        new_height = min(self._base_h + pool_rows_total * 150, max_h)
         cur_geo = self.root.geometry()
         try:
             width = int(cur_geo.split("x")[0])
         except (ValueError, IndexError):
-            width = min(900, int(sw * 0.90))
+            width = self._base_w
         self.root.geometry(f"{width}x{new_height}")
-        self.root.minsize(min(660, sw - 80), min(480, sh - 80))
+        self.root.minsize(min(560, sw - 80), min(400, sh - 80))
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -1479,13 +1478,7 @@ class TrueMonClientApp:
             card["frame"].destroy()
         self.pool_cards = {}
         self._pool_count = 0
-        import sys
-        if sys.platform == "win32":
-            self.root.geometry("760x560")
-            self.root.minsize(660, 480)
-        else:
-            self.root.geometry("860x640")
-            self.root.minsize(760, 560)
+        self.root.geometry(f"{self._base_w}x{self._base_h}")
         self.info_lbl.config(text="Connect to TrueMonitor to begin monitoring")
         self.footer.config(text="")
 
