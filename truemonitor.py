@@ -906,13 +906,13 @@ class TrueMonitorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TrueMonitor")
-        import sys
-        if sys.platform == "win32":
-            self.root.geometry("760x560")
-            self.root.minsize(660, 480)
-        else:
-            self.root.geometry("860x640")
-            self.root.minsize(760, 560)
+        self.root.update_idletasks()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        w = min(900, int(sw * 0.90))
+        h = min(700, int(sh * 0.88))
+        self.root.geometry(f"{w}x{h}")
+        self.root.minsize(min(660, sw - 80), min(480, sh - 80))
         self.root.configure(bg=COLORS["bg"])
 
         self.client = None
@@ -1428,11 +1428,10 @@ class TrueMonitorApp:
             disks = pool.get("disks", [])
             for disk in disks:
                 color = COLORS["critical"] if disk["has_error"] else COLORS["good"]
-                rect = tk.Canvas(
-                    disk_frame, width=14, height=20,
-                    highlightthickness=0, bd=0, bg=COLORS["card"],
+                rect = tk.Label(
+                    disk_frame, text="\u25ae", fg=color,
+                    bg=COLORS["card"], font=("Helvetica", self._sf(16)),
                 )
-                rect.create_rectangle(0, 0, 14, 20, fill=color, outline="")
                 rect.pack(side=tk.LEFT, padx=2)
                 _Tooltip(rect, disk["name"])
                 disk_rects.append(rect)
@@ -1445,19 +1444,19 @@ class TrueMonitorApp:
             }
 
         # Resize window to fit pool rows
-        import sys
         pool_rows_total = math.ceil(num_pools / 2)
-        base_h = 560 if sys.platform == "win32" else 640
-        min_w = 660 if sys.platform == "win32" else 760
-        min_base_h = 480 if sys.platform == "win32" else 560
-        new_height = base_h + pool_rows_total * 200
+        sh = self.root.winfo_screenheight()
+        sw = self.root.winfo_screenwidth()
+        max_h = int(sh * 0.92)
+        base_h = min(640, int(sh * 0.60))
+        new_height = min(base_h + pool_rows_total * 200, max_h)
         cur_geo = self.root.geometry()
         try:
             width = int(cur_geo.split("x")[0])
         except (ValueError, IndexError):
-            width = 1050
+            width = min(900, int(sw * 0.90))
         self.root.geometry(f"{width}x{new_height}")
-        self.root.minsize(min_w, min_base_h + pool_rows_total * 180)
+        self.root.minsize(min(660, sw - 80), min(480, sh - 80))
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -2479,8 +2478,7 @@ class TrueMonitorApp:
                 for i, rect in enumerate(card.get("disk_rects", [])):
                     if i < len(disks):
                         disk_col = COLORS["critical"] if disks[i]["has_error"] else COLORS["good"]
-                        rect.delete("all")
-                        rect.create_rectangle(0, 0, 14, 20, fill=disk_col, outline="")
+                        rect.config(fg=disk_col)
 
                 # Update stored topology for drive map button
                 topo = pool.get("topology", {})
