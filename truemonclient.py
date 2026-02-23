@@ -826,13 +826,19 @@ class TrueMonClientApp:
         sh = self.root.winfo_screenheight()
         sw = self.root.winfo_screenwidth()
         max_h = int(sh * 0.92)
-        new_height = min(self._base_h + pool_rows_total * 150, max_h)
+        self.root.update_idletasks()
+        needed_h = self.root.winfo_reqheight() + 40
+        new_height = min(max(needed_h, self._base_h + pool_rows_total * 210), max_h)
         cur_geo = self.root.geometry()
         try:
-            width = int(cur_geo.split("x")[0])
+            cur_parts = cur_geo.split("x")
+            width = int(cur_parts[0])
+            cur_h = int(cur_parts[1].split("+")[0])
         except (ValueError, IndexError):
             width = self._base_w
-        self.root.geometry(f"{width}x{new_height}")
+            cur_h = 0
+        if new_height > cur_h:
+            self.root.geometry(f"{width}x{new_height}")
         self.root.minsize(min(560, sw - 80), min(400, sh - 80))
 
     def _show_drive_map(self, pool_name, topology):
