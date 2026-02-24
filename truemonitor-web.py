@@ -36,7 +36,8 @@ except ImportError:
     raise SystemExit(1)
 
 try:
-    from flask import Flask, Response, request, jsonify, stream_with_context
+    from flask import (Flask, Response, request, jsonify, stream_with_context,
+                       session, redirect, url_for)
 except ImportError:
     print("ERROR: 'flask' package is required. Install it with:")
     print("  pip install flask")
@@ -801,6 +802,50 @@ def _ensure_ssl_cert():
 
 
 # ---------------------------------------------------------------------------
+# Login page template
+# ---------------------------------------------------------------------------
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrueMonitor &mdash; Sign In</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: Helvetica, Arial, sans-serif;
+       display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.box { background: #16213e; border: 1px solid #0f3460; border-radius: 6px;
+       padding: 36px 40px; width: 320px; }
+h1 { color: #4fc3f7; font-size: 22px; font-weight: bold; margin-bottom: 4px; }
+.ver { color: #888899; font-size: 11px; margin-bottom: 28px; }
+label { display: block; font-size: 13px; margin-bottom: 6px; }
+input { width: 100%; background: #0f3460; color: #e0e0e0; border: none; border-radius: 3px;
+        padding: 9px 12px; font-size: 13px; font-family: inherit; margin-bottom: 16px; }
+input:focus { outline: 1px solid #4fc3f7; }
+button { width: 100%; background: #fff; color: #000; border: none; border-radius: 3px;
+         padding: 10px; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; }
+button:hover { background: #e0e0e0; }
+.err { color: #ef5350; font-size: 12px; margin-bottom: 14px; min-height: 18px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>TrueMonitor</h1>
+  <div class="ver">v{version}</div>
+  <form method="post" action="/login">
+    <label for="u">Username</label>
+    <input id="u" name="username" type="text" autocomplete="username" autofocus>
+    <label for="p">Password</label>
+    <input id="p" name="password" type="password" autocomplete="current-password">
+    <div class="err">{error}</div>
+    <button type="submit">Sign In</button>
+  </form>
+</div>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
 # Embedded HTML/CSS/JS template
 # ---------------------------------------------------------------------------
 HTML_TEMPLATE = r"""<!DOCTYPE html>
@@ -901,7 +946,7 @@ a { color: var(--accent); }
 .disk-row { display: flex; align-items: center; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
 .disk-lbl { font-size: 11px; color: var(--text-dim); margin-right: 4px; }
 .disk-ind { width: 12px; height: 18px; border-radius: 2px; display: inline-block;
-            cursor: default; position: relative; }
+            cursor: default; position: relative; margin: 0 3px; }
 .disk-ind:hover::after { content: attr(title); position: absolute; bottom: 22px; left: 50%;
   transform: translateX(-50%); background: #333344; color: var(--text); padding: 2px 6px;
   border-radius: 3px; font-size: 10px; white-space: nowrap; z-index: 100; pointer-events: none; }
@@ -997,6 +1042,7 @@ a { color: var(--accent); }
   <h1>TrueMonitor</h1>
   <span class="version">v{{VERSION}}</span>
   <span id="status-badge">Disconnected</span>
+  <a href="/logout" style="margin-left:12px;font-size:12px;color:var(--text-dim);text-decoration:none" title="Sign out">Logout</a>
 </div>
 
 <div id="tab-bar">
@@ -1139,6 +1185,23 @@ a { color: var(--accent); }
     </div>
     <div class="settings-note" style="margin-left:200px;margin-bottom:6px">
       Address/port changes take effect after restart.
+    </div>
+
+    <div class="settings-divider">--- web access ---</div>
+    <div class="settings-row">
+      <label class="settings-label">Username:</label>
+      <input class="settings-input" id="s-web-user" type="text" style="width:200px">
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">New Password:</label>
+      <div class="key-row">
+        <input class="settings-input" id="s-web-pass" type="password" placeholder="leave blank to keep current">
+        <button class="key-show-btn" onclick="toggleShow('s-web-pass',this)">Show</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <label class="settings-label">Confirm Password:</label>
+      <input class="settings-input" id="s-web-pass2" type="password" placeholder="confirm new password">
     </div>
 
     <div class="btn-row">
@@ -1529,6 +1592,9 @@ function loadSettingsForm() {
     document.getElementById('s-web-host').value = cfg.web_host||'0.0.0.0';
     document.getElementById('s-web-port').value = cfg.web_port||8088;
     updateHttpsPort();
+    document.getElementById('s-web-user').value = cfg.web_username||'client';
+    document.getElementById('s-web-pass').value = '';
+    document.getElementById('s-web-pass2').value = '';
     fetch('/api/broadcast_status').then(r=>r.json()).then(d => {
       document.getElementById('broadcast-status').textContent = d.text;
     }).catch(()=>{});
@@ -1556,6 +1622,13 @@ function saveSettings() {
   const pass = document.getElementById('s-pass').value.trim();
   if (!host) { showMsg('Please enter an IP address or hostname.', 'critical'); return; }
   if (!apiKey && !(user && pass)) { showMsg('Provide an API key or username & password.', 'critical'); return; }
+  const webUser = document.getElementById('s-web-user').value.trim();
+  const webPass = document.getElementById('s-web-pass').value;
+  const webPass2 = document.getElementById('s-web-pass2').value;
+  if (webPass && webPass !== webPass2) {
+    showMsg('New passwords do not match.', 'err'); return;
+  }
+  if (!webUser) { showMsg('Web username cannot be empty.', 'err'); return; }
   const body = {
     host, api_key: apiKey, username: user, password: pass,
     interval: parseInt(document.getElementById('s-interval').value)||5,
@@ -1565,6 +1638,8 @@ function saveSettings() {
     broadcast_key: document.getElementById('s-bcast-key').value.trim()||'truemonitor',
     web_host: document.getElementById('s-web-host').value.trim()||'0.0.0.0',
     web_port: parseInt(document.getElementById('s-web-port').value)||8088,
+    web_username: webUser,
+    web_password: webPass,
   };
   fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
     .then(r=>r.json()).then(d => {
@@ -1674,7 +1749,9 @@ class TrueMonitorWebApp:
         log = logging.getLogger("werkzeug")
         log.setLevel(logging.ERROR)
         self.flask_app = Flask(__name__)
-        self.flask_app.config["SECRET_KEY"] = os.urandom(24)
+        # Deterministic key so sessions survive restarts
+        self.flask_app.config["SECRET_KEY"] = _get_encryption_key()
+        self.flask_app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
         self._setup_routes()
 
         # Load existing alerts from disk
@@ -1696,11 +1773,11 @@ class TrueMonitorWebApp:
                 with open(CONFIG_FILE) as f:
                     data = json.load(f)
                 needs_resave = False
-                for key in ("password", "api_key"):
+                for key in ("password", "api_key", "web_password"):
                     if data.get(f"{key}_encrypted") and data.get(key):
                         data[key] = _decrypt(data[key])
                         del data[f"{key}_encrypted"]
-                    elif data.get(key):
+                    elif data.get(key) and key not in ("web_password",):
                         needs_resave = True
                 if needs_resave:
                     self.config = data
@@ -1713,7 +1790,7 @@ class TrueMonitorWebApp:
     def _save_config(self):
         os.makedirs(CONFIG_DIR, exist_ok=True)
         save_data = dict(self.config)
-        for key in ("password", "api_key"):
+        for key in ("password", "api_key", "web_password"):
             if save_data.get(key):
                 save_data[key] = _encrypt(save_data[key])
                 save_data[f"{key}_encrypted"] = True
@@ -1746,8 +1823,43 @@ class TrueMonitorWebApp:
     # -----------------------------------------------------------------------
     # Flask routes
     # -----------------------------------------------------------------------
+    def _check_credentials(self, username, password):
+        cfg_user = self.config.get("web_username", "client")
+        cfg_pass = self.config.get("web_password", "truemonitor")
+        return username == cfg_user and password == cfg_pass
+
     def _setup_routes(self):
         app = self.flask_app
+
+        @app.before_request
+        def require_login():
+            if request.path in ("/login", "/logout"):
+                return None
+            if not session.get("logged_in"):
+                if request.path.startswith("/api/") or request.path == "/events":
+                    return jsonify({"error": "unauthorized"}), 401
+                return redirect("/login")
+
+        @app.route("/login", methods=["GET", "POST"])
+        def login():
+            error = ""
+            if request.method == "POST":
+                u = request.form.get("username", "").strip()
+                p = request.form.get("password", "")
+                if self._check_credentials(u, p):
+                    session.permanent = True
+                    session["logged_in"] = True
+                    return redirect("/")
+                error = "Invalid username or password."
+            return Response(
+                LOGIN_HTML.format(version=APP_VERSION, error=error),
+                content_type="text/html",
+            )
+
+        @app.route("/logout")
+        def logout():
+            session.clear()
+            return redirect("/login")
 
         @app.route("/")
         def index():
@@ -1795,6 +1907,8 @@ class TrueMonitorWebApp:
             cfg.setdefault("web_port", WEB_DEFAULT_PORT)
             cfg.setdefault("broadcast_port", BROADCAST_DEFAULT_PORT)
             cfg.setdefault("broadcast_key", BROADCAST_DEFAULT_KEY)
+            cfg.setdefault("web_username", "client")
+            cfg.pop("web_password", None)  # never send password to browser
             return jsonify(cfg)
 
         @app.route("/api/broadcast_status")
@@ -1845,6 +1959,12 @@ class TrueMonitorWebApp:
                     web_port = WEB_DEFAULT_PORT
                 web_host = (body.get("web_host") or WEB_DEFAULT_HOST).strip()
 
+                web_username = (body.get("web_username") or "client").strip()
+                web_password_new = body.get("web_password", "").strip()
+                # Keep existing password if none provided
+                web_password = (web_password_new if web_password_new
+                                else self.config.get("web_password", "truemonitor"))
+
                 old_web = (self.config.get("web_host"), self.config.get("web_port"))
                 self.config = {
                     "host": host, "api_key": api_key,
@@ -1856,6 +1976,8 @@ class TrueMonitorWebApp:
                     "broadcast_key": bcast_key,
                     "web_host": web_host,
                     "web_port": web_port,
+                    "web_username": web_username,
+                    "web_password": web_password,
                 }
                 self._save_config()
                 self._start_broadcast_server_if_enabled()
