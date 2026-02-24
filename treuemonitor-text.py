@@ -22,7 +22,6 @@ Keys — Settings:
     Enter        Next field (or Save & Connect on last item)
     Backspace    Delete character
     Left / Right Move cursor in field
-    S            Save & Connect (from anywhere in the form)
     ESC          Cancel, back to menu
 
 Keys — Alerts:
@@ -1593,9 +1592,6 @@ def run_ui(stdscr, conn, state, config):
             if key == 27:   # ESC — cancel
                 state.current_view = "menu"
                 form = SettingsForm(config)  # discard edits
-            elif key in (ord("s"), ord("S")) and form.focused != _SAVE_IDX:
-                # S shortcut: jump to save
-                form.focused = _SAVE_IDX
             else:
                 save_requested = form.handle_key(key)
                 if save_requested:
