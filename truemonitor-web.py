@@ -1852,7 +1852,7 @@ class TrueMonitorWebApp:
                     return redirect("/")
                 error = "Invalid username or password."
             return Response(
-                LOGIN_HTML.format(version=APP_VERSION, error=error),
+                LOGIN_HTML.replace("{version}", APP_VERSION).replace("{error}", error),
                 content_type="text/html",
             )
 
