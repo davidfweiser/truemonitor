@@ -26,7 +26,7 @@ Three companion apps can display the same live data remotely: **TrueMonClient** 
 - **Memory Usage** - Used/total with percentage bar
 - **Network I/O** - Scrolling line graph showing receive (green) and transmit (blue) speeds with auto-scaling Y-axis
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
-- **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%)
+- **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Window auto-expands to fit all pool cards on connect.
 - **Disk Health Indicators** - Each pool card displays small colored rectangles for every disk. Green = healthy, red = errors. Hover to see the drive name.
 - **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red. Drive Map and Close buttons styled in dark navy blue to match the app theme.
 
@@ -45,6 +45,7 @@ Three companion apps can display the same live data remotely: **TrueMonClient** 
 - **Font Size**: Small (85%), Medium (100%), Large (115%) — persists across restarts
 - **Broadcast to Clients**: Enable/disable the broadcast server, set port and shared key (see below)
 - **Demo Mode**: Preview the dashboard with simulated data including sample vdev topologies
+- **Window Memory**: Window size and position remembered and restored across launches
 
 ### Usage
 
@@ -100,7 +101,6 @@ python3 treuemonitor-text.py --host 192.168.1.100 --username admin --password se
 | Settings | `Tab` / `↓` | Next field |
 | Settings | `Shift+Tab` / `↑` | Previous field |
 | Settings | `Space` / `Enter` | Toggle checkbox / advance field |
-| Settings | `S` | Jump to Save & Connect |
 | Settings | `←` `→` | Move cursor in field |
 | Settings | `Backspace` | Delete character |
 | Alerts | `C` | Clear all alerts |
@@ -127,6 +127,7 @@ TrueMonClient is an identical monitoring UI that receives its data from a runnin
 - TrueNAS system alerts forwarded from the server and displayed in the Alerts tab
 - Independent alert thresholds (evaluated locally on received data)
 - Demo Mode for testing without a TrueMonitor connection
+- Window size and position remembered and restored across launches
 - Config stored separately in `~/.config/truemonclient/`
 
 ### Usage
@@ -189,7 +190,7 @@ pip install -r requirements.txt
 
 | Package | Version | Used by |
 |---------|---------|---------|
-| `requests` | >=2.28.0 | `truemonitor.py`, `treuemonitor-text.py` |
+| `websocket-client` | >=1.6.0 | `truemonitor.py`, `treuemonitor-text.py` — TrueNAS WebSocket API |
 | `cryptography` | >=3.4 | All Python apps — Fernet encryption + PBKDF2 key derivation |
 
 ### macOS / Apple Silicon note
@@ -236,12 +237,12 @@ pip install -r requirements.txt
 
 ## TrueNAS API Compatibility
 
-TrueMonitor auto-detects the correct API format for your TrueNAS version, trying multiple reporting endpoint and payload formats and caching whichever one works. Tested with:
+TrueMonitor uses the **TrueNAS WebSocket JSON-RPC 2.0 API** (`wss://host/api/current`) via a persistent connection, replacing the deprecated REST API removed in TrueNAS 26.04. Authentication supports both API key (`auth.login_with_api_key`) and username/password (`auth.login`). Reporting data is fetched with automatic fallback across multiple method signatures to handle differences between TrueNAS versions.
+
+Tested with:
 
 - TrueNAS SCALE 25.10.x
 - TrueNAS SCALE 24.10.x
-
-Authentication supports both API key (Bearer token) and basic username/password.
 
 ---
 
@@ -308,13 +309,13 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 
 ### truemonitor.py
 
-- **TrueNASClient** - REST API client: authentication, endpoint auto-detection, format caching, data parsing for CPU, memory, network, temperature, pools, and system alerts
+- **TrueNASClient** - WebSocket JSON-RPC 2.0 client: persistent `wss://` connection, API key or password auth, auto-reconnect on network errors, multi-format reporting fallback, data parsing for CPU, memory, network, temperature, pools, and system alerts
 - **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
-- **TrueMonitorApp** - tkinter GUI with threaded background polling and thread-safe UI updates via `root.after()`
+- **TrueMonitorApp** - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, and persistent window size/position across launches
 
 ### treuemonitor-text.py
 
-- **TrueNASClient** - Same REST API client as `truemonitor.py`
+- **TrueNASClient** - Same WebSocket JSON-RPC 2.0 client as `truemonitor.py`
 - **BroadcastServer** - Same broadcast server as `truemonitor.py`
 - **AppState** - Shared data state: stats, alert log, alert evaluation, broadcast server lifecycle
 - **SettingsForm** - Curses form managing text, secret, and toggle field types with per-field cursor positions
@@ -324,7 +325,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 ### truemonclient.py
 
 - **MonitorClient** - TCP client that connects to TrueMonitor's broadcast server, performs HMAC auth handshake, decrypts incoming packets, and feeds data to the UI. Auto-reconnects on disconnect.
-- **TrueMonClientApp** - tkinter GUI driven by received data instead of direct API polling
+- **TrueMonClientApp** - tkinter GUI driven by received data instead of direct API polling, with persistent window size/position across launches
 
 ### TrueMonClient iOS
 
