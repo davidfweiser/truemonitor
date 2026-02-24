@@ -1,8 +1,8 @@
-# TrueMonitor v0.4
+# TrueMonitor v0.5
 
-A real-time monitoring dashboard for TrueNAS systems. Built with Python and tkinter, TrueMonitor provides a dark-themed GUI that displays system metrics, storage pool health, and alerts from your TrueNAS server.
+A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMonitor provides a dark-themed interface that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
-Three companion apps can display the same live data remotely: **TrueMonClient** (Python desktop GUI), **TrueMonitor Text** (headless/SSH curses TUI), and **TrueMonClient iOS** (native iPhone app).
+Four companion apps can display the same live data remotely: **TrueMonitor Web** (browser-based dashboard), **TrueMonClient** (Python desktop GUI), **TrueMonitor Text** (headless/SSH curses TUI), and **TrueMonClient iOS** (native iPhone app).
 
 ---
 
@@ -10,7 +10,8 @@ Three companion apps can display the same live data remotely: **TrueMonClient** 
 
 | File | Description |
 |------|-------------|
-| `truemonitor.py` | Main dashboard — connects to TrueNAS API, displays metrics, broadcasts data to clients |
+| `truemonitor.py` | Main dashboard — tkinter GUI, connects to TrueNAS API, displays metrics, broadcasts data to clients |
+| `truemonitor-web.py` | Web dashboard — browser-based version of truemonitor.py, served via Flask on port 8088 |
 | `truemonclient.py` | Remote client — receives and displays live data from a running TrueMonitor instance |
 | `treuemonitor-text.py` | Text-mode TUI — same TrueNAS API, curses interface for headless/SSH use |
 | `TrueMonClient-iOS/` | Native iOS app — same monitoring dashboard for iPhone, built with SwiftUI |
@@ -28,7 +29,7 @@ Three companion apps can display the same live data remotely: **TrueMonClient** 
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
 - **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Window auto-expands to fit all pool cards on connect.
 - **Disk Health Indicators** - Each pool card displays small colored rectangles for every disk. Green = healthy, red = errors. Hover to see the drive name.
-- **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red. Drive Map and Close buttons styled in dark navy blue to match the app theme.
+- **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red.
 
 #### Alerts Tab
 - Automatic alerts for configurable CPU temperature threshold, CPU usage >95%, and memory usage >95%
@@ -58,6 +59,43 @@ python3 truemonitor.py
 3. Enter an API key **or** username and password
 4. Set the poll interval and CPU temperature alert threshold
 5. Click **Save & Connect**
+
+---
+
+## TrueMonitor Web
+
+A browser-based version of TrueMonitor with the same features and dark theme, served locally via Flask. No tkinter required — open it in any browser on your network.
+
+### Features
+
+- Identical Monitor, Alerts, and Settings tabs to `truemonitor.py`
+- Real-time updates pushed to all connected browser tabs via Server-Sent Events
+- Canvas-based scrolling graphs for network I/O and CPU temperature
+- Drive Map modal for full vdev topology
+- Browser Notification API used for critical/warning alerts
+- HTTP on port **8088**, HTTPS on port **8089** (self-signed cert auto-generated)
+- Broadcasts to TrueMonClient instances using the same encrypted TCP protocol
+- Opens a browser tab automatically on launch
+- Configurable web address and port in the Settings tab
+
+#### Settings Tab — Web Server Section
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Bind Address | `0.0.0.0` | Network interface to listen on (`0.0.0.0` = all interfaces) |
+| HTTP Port | `8088` | Port for the HTTP web interface |
+| HTTPS Port | HTTP Port + 1 | Read-only; always one above the HTTP port |
+
+Address and port changes take effect after a restart.
+
+### Usage
+
+```bash
+python3 truemonitor-web.py
+```
+
+A browser tab opens automatically at `http://localhost:8088`. From there, go to **Settings**, enter your TrueNAS connection details, and click **Save & Connect**.
+
+To access from another machine on your network, open `http://<host-ip>:8088` in a browser.
 
 ---
 
@@ -136,7 +174,7 @@ TrueMonClient is an identical monitoring UI that receives its data from a runnin
 python3 truemonclient.py
 ```
 
-1. In **TrueMonitor**, go to Settings → enable **Broadcast**, set a port and shared key, click **Save & Connect**
+1. In **TrueMonitor** (or **TrueMonitor Web**), go to Settings → enable **Broadcast**, set a port and shared key, click **Save & Connect**
 2. In **TrueMonClient**, go to Settings → enter the TrueMonitor machine's IP, broadcast port, and the same shared key
 3. Click **Save & Connect**
 
@@ -146,7 +184,7 @@ TrueMonClient will connect within seconds and begin displaying the same live met
 
 ## Broadcast Feature
 
-TrueMonitor includes a built-in TCP broadcast server that pushes encrypted monitoring data to any connected TrueMonClient instances after every poll cycle. `treuemonitor-text.py` includes the same broadcast server and can be used as a headless alternative to `truemonitor.py`.
+TrueMonitor, TrueMonitor Web, and TrueMonitor Text all include a built-in TCP broadcast server that pushes encrypted monitoring data to any connected TrueMonClient instances after every poll cycle.
 
 ### Security
 
@@ -190,8 +228,9 @@ pip install -r requirements.txt
 
 | Package | Version | Used by |
 |---------|---------|---------|
-| `websocket-client` | >=1.6.0 | `truemonitor.py`, `treuemonitor-text.py` — TrueNAS WebSocket API |
+| `websocket-client` | >=1.6.0 | `truemonitor.py`, `truemonitor-web.py`, `treuemonitor-text.py` — TrueNAS WebSocket API |
 | `cryptography` | >=3.4 | All Python apps — Fernet encryption + PBKDF2 key derivation |
+| `flask` | >=2.3 | `truemonitor-web.py` — web server and Server-Sent Events |
 
 ### macOS / Apple Silicon note
 
@@ -201,13 +240,13 @@ Newer versions of macOS block `pip install` directly to the system Python to pro
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python3 truemonitor.py
+python3 truemonitor.py        # or truemonitor-web.py
 ```
 
 Next time you open a terminal, just run `source venv/bin/activate` again before launching the app. You can also activate the venv and run everything in one line:
 
 ```bash
-source venv/bin/activate && python3 truemonitor.py
+source venv/bin/activate && python3 truemonitor-web.py
 ```
 
 ---
@@ -227,6 +266,7 @@ pip install -r requirements.txt
 | Feature | Linux | Windows | macOS |
 |---------|-------|---------|-------|
 | GUI (truemonitor / truemonclient) | tkinter | tkinter | tkinter |
+| Web (truemonitor-web) | any browser | any browser | any browser |
 | TUI (treuemonitor-text) | curses | curses + `windows-curses` | curses |
 | Alert sound | paplay/aplay | winsound | afplay |
 | Encryption key source | /etc/machine-id | Home directory | Home directory |
@@ -248,15 +288,17 @@ Tested with:
 
 ## Configuration Files
 
-### TrueMonitor — `~/.config/truemonitor/`
+### TrueMonitor / TrueMonitor Web / TrueMonitor Text — `~/.config/truemonitor/`
 
 | File | Purpose |
 |------|---------|
-| `config.json` | Connection settings, encrypted credentials, alert thresholds, broadcast settings |
+| `config.json` | Connection settings, encrypted credentials, alert thresholds, broadcast settings, web server address/port |
 | `alerts.log` | Persistent alert history |
 | `debug.log` | API debug output (cleared on each launch) |
+| `truemonitor-web.crt` | Auto-generated self-signed SSL certificate for HTTPS (truemonitor-web.py only) |
+| `truemonitor-web.key` | Private key for the SSL certificate (truemonitor-web.py only) |
 
-`treuemonitor-text.py` reads and writes the same `~/.config/truemonitor/` directory.
+`truemonitor.py`, `truemonitor-web.py`, and `treuemonitor-text.py` all share the same `~/.config/truemonitor/` directory.
 
 ### TrueMonClient — `~/.config/truemonclient/`
 
@@ -307,11 +349,12 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 
 ## Architecture
 
-### truemonitor.py
+### truemonitor.py / truemonitor-web.py
 
 - **TrueNASClient** - WebSocket JSON-RPC 2.0 client: persistent `wss://` connection, API key or password auth, auto-reconnect on network errors, multi-format reporting fallback, data parsing for CPU, memory, network, temperature, pools, and system alerts
 - **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
-- **TrueMonitorApp** - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, and persistent window size/position across launches
+- **TrueMonitorApp** *(truemonitor.py)* - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, and persistent window size/position across launches
+- **TrueMonitorWebApp** *(truemonitor-web.py)* - Flask web server with Server-Sent Events for real-time browser updates; embeds a full HTML/CSS/JS dashboard; runs HTTP on the configured port and HTTPS on port+1 with an auto-generated self-signed certificate
 
 ### treuemonitor-text.py
 
