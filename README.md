@@ -232,6 +232,35 @@ pip install -r requirements.txt
 | `cryptography` | >=3.4 | All Python apps — Fernet encryption + PBKDF2 key derivation |
 | `flask` | >=2.3 | `truemonitor-web.py` — web server and Server-Sent Events |
 
+### Linux note
+
+On Linux, pip may be blocked from installing to the system Python (`externally-managed-environment` error). A virtual environment is required. Set it up once:
+
+```bash
+cd truemonitor
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+sudo apt install python3-tk   # for truemonitor.py and truemonclient.py only
+```
+
+Then to run the apps, activate the venv first each time you open a new terminal:
+
+```bash
+source venv/bin/activate
+python3 truemonitor.py          # GUI dashboard
+python3 truemonitor-web.py      # web dashboard
+python3 treuemonitor-text.py    # text/TUI mode
+```
+
+Or activate and launch in one line:
+
+```bash
+source venv/bin/activate && python3 truemonitor-web.py
+source venv/bin/activate && python3 truemonitor.py
+source venv/bin/activate && python3 treuemonitor-text.py
+```
+
 ### macOS / Apple Silicon note
 
 Newer versions of macOS block `pip install` directly to the system Python to protect OS-managed packages. If you see an error like `externally-managed-environment`, use a virtual environment instead:
@@ -256,6 +285,20 @@ source venv/bin/activate && python3 truemonitor-web.py
 ```bash
 git clone https://github.com/davidfweiser/truemonitor.git
 cd truemonitor
+```
+
+**Linux** (virtual environment required):
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+sudo apt install python3-tk   # only needed for truemonitor.py and truemonclient.py
+```
+
+**Windows / macOS**:
+
+```bash
 pip install -r requirements.txt
 ```
 
