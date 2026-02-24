@@ -825,7 +825,8 @@ input:focus { outline: 1px solid #4fc3f7; }
 button { width: 100%; background: #fff; color: #000; border: none; border-radius: 3px;
          padding: 10px; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; }
 button:hover { background: #e0e0e0; }
-.err { color: #ef5350; font-size: 12px; margin-bottom: 14px; min-height: 18px; }
+.err { color: #ef5350; font-size: 12px; margin-bottom: 14px; min-height: 18px; line-height: 1.4; }
+button:disabled { opacity: 0.4; cursor: default; }
 </style>
 </head>
 <body>
@@ -834,11 +835,11 @@ button:hover { background: #e0e0e0; }
   <div class="ver">v{version}</div>
   <form method="post" action="/login">
     <label for="u">Username</label>
-    <input id="u" name="username" type="text" autocomplete="username" autofocus>
+    <input id="u" name="username" type="text" autocomplete="username" autofocus {disabled}>
     <label for="p">Password</label>
-    <input id="p" name="password" type="password" autocomplete="current-password">
+    <input id="p" name="password" type="password" autocomplete="current-password" {disabled}>
     <div class="err">{error}</div>
-    <button type="submit">Sign In</button>
+    <button type="submit" {disabled}>Sign In</button>
   </form>
 </div>
 </body>
@@ -1740,6 +1741,10 @@ class TrueMonitorWebApp:
         self._sse_queues = []
         self._sse_lock = threading.Lock()
 
+        # Login brute-force tracking: ip -> (failure_count, last_failure_time)
+        self._login_failures = {}
+        self._login_lock = threading.Lock()
+
         # Connection status
         self._status_text = "Disconnected"
         self._status_state = ""  # ok, err, connecting, demo
@@ -1821,6 +1826,53 @@ class TrueMonitorWebApp:
         self._push_event("status", {"text": text, "state": state})
 
     # -----------------------------------------------------------------------
+    # Login brute-force protection
+    # -----------------------------------------------------------------------
+    # After MAX_FAILURES failed attempts the IP is locked out for LOCKOUT_SECONDS.
+    # The lockout resets automatically once the period expires.
+    MAX_FAILURES = 5
+    LOCKOUT_SECONDS = 15 * 60  # 15 minutes
+
+    def _get_client_ip(self):
+        """Return the real client IP, respecting X-Forwarded-For from a proxy."""
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.remote_addr or "unknown"
+
+    def _lockout_remaining(self, ip: str) -> int:
+        """Return seconds remaining in lockout for this IP, or 0 if not locked."""
+        with self._login_lock:
+            entry = self._login_failures.get(ip)
+            if not entry:
+                return 0
+            count, last = entry
+            if count < self.MAX_FAILURES:
+                return 0
+            elapsed = (datetime.now() - last).total_seconds()
+            remaining = self.LOCKOUT_SECONDS - elapsed
+            if remaining <= 0:
+                del self._login_failures[ip]
+                return 0
+            return int(remaining)
+
+    def _record_failure(self, ip: str):
+        with self._login_lock:
+            count, _ = self._login_failures.get(ip, (0, None))
+            self._login_failures[ip] = (count + 1, datetime.now())
+            debug(f"Login failure #{count + 1} from {ip}")
+
+    def _reset_failures(self, ip: str):
+        with self._login_lock:
+            self._login_failures.pop(ip, None)
+
+    def _failures_remaining(self, ip: str) -> int:
+        """How many attempts left before lockout."""
+        with self._login_lock:
+            count, _ = self._login_failures.get(ip, (0, None))
+            return max(0, self.MAX_FAILURES - count)
+
+    # -----------------------------------------------------------------------
     # Flask routes
     # -----------------------------------------------------------------------
     def _check_credentials(self, username, password):
@@ -1842,18 +1894,41 @@ class TrueMonitorWebApp:
 
         @app.route("/login", methods=["GET", "POST"])
         def login():
+            ip = self._get_client_ip()
             error = ""
-            if request.method == "POST":
+
+            # Check lockout before doing anything
+            remaining = self._lockout_remaining(ip)
+            locked = remaining > 0
+            if locked:
+                mins, secs = divmod(remaining, 60)
+                error = f"Too many failed attempts. Try again in {mins}m {secs:02d}s."
+
+            elif request.method == "POST":
                 u = request.form.get("username", "").strip()
                 p = request.form.get("password", "")
                 if self._check_credentials(u, p):
+                    self._reset_failures(ip)
                     session.permanent = True
                     session["logged_in"] = True
                     return redirect("/")
-                error = "Invalid username or password."
+                self._record_failure(ip)
+                left = self._failures_remaining(ip)
+                if left == 0:
+                    mins, secs = divmod(self.LOCKOUT_SECONDS, 60)
+                    error = f"Too many failed attempts. Locked out for {mins} minutes."
+                    locked = True
+                else:
+                    error = f"Invalid username or password. {left} attempt{'s' if left != 1 else ''} remaining."
+
+            disabled = "disabled" if locked else ""
             return Response(
-                LOGIN_HTML.replace("{version}", APP_VERSION).replace("{error}", error),
+                LOGIN_HTML
+                    .replace("{version}", APP_VERSION)
+                    .replace("{error}", error)
+                    .replace("{disabled}", disabled),
                 content_type="text/html",
+                status=429 if locked else 200,
             )
 
         @app.route("/logout")
