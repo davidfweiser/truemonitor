@@ -3,3 +3,6 @@ websocket-client>=1.6.0
 
 # truemonitor.py + truemonclient.py — credential/broadcast encryption (Fernet + PBKDF2HMAC)
 cryptography>=3.4
+
+# truemonitor-web.py — web interface
+flask>=2.3
