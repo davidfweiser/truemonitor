@@ -179,10 +179,13 @@ class BroadcastServer:
                 try:
                     conn, addr = self._server_sock.accept()
                     ip = addr[0]
+                    # Enforce backoff: silently drop connections arriving too soon
                     wait = self._backoff_remaining(ip)
                     if wait > 0:
+                        debug(f"BroadcastServer: backoff {wait:.0f}s remaining for {ip}")
                         conn.close()
                         continue
+                    # Each new connection gets its own auth thread
                     t = threading.Thread(
                         target=self._authenticate_client,
                         args=(conn, ip),
