@@ -1587,6 +1587,7 @@ function loadSettingsForm() {
     document.getElementById('s-user').value = cfg.username||'';
     document.getElementById('s-pass').value = cfg.password||'';
     document.getElementById('s-interval').value = cfg.interval||5;
+    document.getElementById('s-temp-thresh').value = cfg.temp_threshold||82;
     document.getElementById('s-bcast-enabled').checked = cfg.broadcast_enabled||false;
     document.getElementById('s-bcast-port').value = cfg.broadcast_port||7337;
     document.getElementById('s-bcast-key').value = cfg.broadcast_key||'truemonitor';
@@ -1978,6 +1979,7 @@ class TrueMonitorWebApp:
             cfg.pop("api_key", None)
             cfg["password"] = "••••" if self.config.get("password") else ""
             cfg["api_key"] = "••••" if self.config.get("api_key") else ""
+            cfg.setdefault("temp_threshold", 82)
             cfg.setdefault("web_host", WEB_DEFAULT_HOST)
             cfg.setdefault("web_port", WEB_DEFAULT_PORT)
             cfg.setdefault("broadcast_port", BROADCAST_DEFAULT_PORT)
