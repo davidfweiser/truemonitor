@@ -27,9 +27,10 @@ Four companion apps can display the same live data remotely: **TrueMonitor Web**
 - **Memory Usage** - Used/total with percentage bar
 - **Network I/O** - Scrolling line graph showing receive (green) and transmit (blue) speeds with auto-scaling Y-axis
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
-- **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Window auto-expands to fit all pool cards on connect.
-- **Disk Health Indicators** - Each pool card displays small colored rectangles for every disk. Green = healthy, red = errors. Hover to see the drive name.
+- **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Window auto-expands to show all pool cards on connect without manual resizing.
+- **Disk Health Indicators** - Each pool card displays a compact colored rectangle per disk (green = healthy, red = errors). Hover to see the drive name. Icons and spacing are sized to keep cards compact.
 - **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red.
+- **Dynamic font scaling** - Card fonts (value labels, titles, sub-labels) scale proportionally as you resize the window. Font Size setting (Small/Medium/Large) sets the baseline; window width adjusts from there.
 
 #### Alerts Tab
 - Automatic alerts for configurable CPU temperature threshold, CPU usage >95%, and memory usage >95%
@@ -46,7 +47,7 @@ Four companion apps can display the same live data remotely: **TrueMonitor Web**
 - **Font Size**: Small (85%), Medium (100%), Large (115%) — persists across restarts
 - **Broadcast to Clients**: Enable/disable the broadcast server, set port and shared key (see below)
 - **Demo Mode**: Preview the dashboard with simulated data including sample vdev topologies
-- **Window Memory**: Window size and position remembered and restored across launches
+- **Window Memory**: Window size and position remembered and restored across launches; restored geometry is clamped to fit the current screen so the window is never larger than the display
 
 ### Usage
 
@@ -176,7 +177,9 @@ TrueMonClient is an identical monitoring UI that receives its data from a runnin
 - TrueNAS system alerts forwarded from the server and displayed in the Alerts tab
 - Independent alert thresholds (evaluated locally on received data)
 - Demo Mode for testing without a TrueMonitor connection
-- Window size and position remembered and restored across launches
+- Window size and position remembered and restored across launches; geometry clamped to current screen on restore
+- Dynamic font scaling — card fonts scale with window width; Font Size setting sets the baseline
+- Pool cards always visible on connect without manual window stretching
 - Config stored separately in `~/.config/truemonclient/`
 
 ### Usage
@@ -407,7 +410,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 
 - **TrueNASClient** - WebSocket JSON-RPC 2.0 client: persistent `wss://` connection, API key or password auth, auto-reconnect on network errors, multi-format reporting fallback, data parsing for CPU, memory, network, temperature, pools, and system alerts
 - **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
-- **TrueMonitorApp** *(truemonitor.py)* - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, and persistent window size/position across launches
+- **TrueMonitorApp** *(truemonitor.py)* - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, persistent window size/position across launches, and dynamic card font scaling on window resize
 - **TrueMonitorWebApp** *(truemonitor-web.py)* - Flask web server with Server-Sent Events for real-time browser updates; embeds a full HTML/CSS/JS dashboard; runs HTTP on the configured port and HTTPS on port+1 with an auto-generated self-signed certificate
 
 ### treuemonitor-text.py
@@ -422,7 +425,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 ### truemonclient.py
 
 - **MonitorClient** - TCP client that connects to TrueMonitor's broadcast server, performs HMAC auth handshake, decrypts incoming packets, and feeds data to the UI. Auto-reconnects on disconnect.
-- **TrueMonClientApp** - tkinter GUI driven by received data instead of direct API polling, with persistent window size/position across launches
+- **TrueMonClientApp** - tkinter GUI driven by received data instead of direct API polling, with persistent window size/position across launches and dynamic card font scaling on window resize
 
 ### TrueMonClient iOS
 
