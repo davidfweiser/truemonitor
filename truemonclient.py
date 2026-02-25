@@ -792,10 +792,10 @@ class TrueMonClientApp:
         self._pool_count = num_pools
         pool_rows = math.ceil(num_pools / 2)
 
-        # minsize ensures the row is always tall enough for the full pool card
-        # content including disk indicators.
+        # Pool card rows: weight=0 so they size to content only; stats rows
+        # (weight=1) get all remaining vertical space for their graphs.
         for r in range(pool_rows):
-            self.grid.rowconfigure(2 + r, weight=1, minsize=250)
+            self.grid.rowconfigure(2 + r, weight=0)
 
         for i, pool in enumerate(pools):
             row = 2 + i // 2
@@ -807,7 +807,7 @@ class TrueMonClientApp:
                 highlightbackground=COLORS["card_border"], highlightthickness=1,
                 padx=18, pady=8,
             )
-            f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
+            f.grid(row=row, column=col, padx=16, pady=8, sticky="ew")
 
             title_row = tk.Frame(f, bg=COLORS["card"])
             title_row.pack(fill=tk.X)
@@ -869,7 +869,7 @@ class TrueMonClientApp:
         max_h = int(sh * 0.92)
         self.root.update_idletasks()
         needed_h = self.root.winfo_reqheight() + 40
-        new_height = min(max(needed_h, self._base_h + pool_rows_total * 260), max_h)
+        new_height = min(max(needed_h, self._base_h + pool_rows_total * 190), max_h)
         cur_geo = self.root.geometry()
         try:
             cur_parts = cur_geo.split("x")
