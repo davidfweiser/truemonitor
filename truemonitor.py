@@ -1024,7 +1024,7 @@ class TrueMonitorApp:
         def _fs(base):
             return max(6, int(round(base * new_scale)))
         s = ttk.Style()
-        s.configure("CardValue.TLabel", font=("Helvetica", _fs(21), "bold"))
+        s.configure("CardValue.TLabel", font=("Helvetica", _fs(16), "bold"))
         s.configure("CardTitle.TLabel", font=("Helvetica", _fs(12), "bold"))
         s.configure("CardSub.TLabel", font=("Helvetica", _fs(10)))
         s.configure("Card.TLabel", font=("Helvetica", _fs(11)))
@@ -1059,7 +1059,7 @@ class TrueMonitorApp:
             "CardTitle.TLabel": {"bg": COLORS["card"], "fg": COLORS["accent"],
                                  "font": ("Helvetica", self._sf(12), "bold")},
             "CardValue.TLabel": {"bg": COLORS["card"], "fg": COLORS["text"],
-                                  "font": ("Helvetica", self._sf(21), "bold")},
+                                  "font": ("Helvetica", self._sf(16), "bold")},
             "CardSub.TLabel": {"bg": COLORS["card"], "fg": COLORS["text_dim"],
                                 "font": ("Helvetica", self._sf(10))},
             "Status.TLabel": {"bg": COLORS["bg"], "fg": COLORS["text_dim"],
@@ -1329,7 +1329,7 @@ class TrueMonitorApp:
         temp_f.pack(fill=tk.X, pady=(6, 4))
         self.temp_val_lbl = tk.Label(
             temp_f, text="--", bg=COLORS["card"], fg=COLORS["text"],
-            font=("Helvetica", self._sf(21), "bold"))
+            font=("Helvetica", self._sf(16), "bold"))
         self.temp_val_lbl.pack(side=tk.LEFT)
         self.temp_status_lbl = tk.Label(
             temp_f, text="", bg=COLORS["card"], fg=COLORS["text_dim"],
