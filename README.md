@@ -1,4 +1,4 @@
-# TrueMonitor v0.5
+# TrueMonitor v0.6
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMonitor provides a dark-themed interface that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
@@ -76,7 +76,9 @@ A browser-based version of TrueMonitor with the same features and dark theme, se
 - HTTP on port **8088**, HTTPS on port **8089** (self-signed cert auto-generated)
 - Broadcasts to TrueMonClient instances using the same encrypted TCP protocol
 - Opens a browser tab automatically on launch
-- Configurable web address and port in the Settings tab
+- Configurable web address, port, and login credentials in the Settings tab
+- Login page with username/password authentication (default: `client` / `truemonitor`)
+- Brute-force lockout: 5 failed attempts locks the IP for 15 minutes
 
 #### Settings Tab — Web Server Section
 | Setting | Default | Description |
@@ -86,6 +88,15 @@ A browser-based version of TrueMonitor with the same features and dark theme, se
 | HTTPS Port | HTTP Port + 1 | Read-only; always one above the HTTP port |
 
 Address and port changes take effect after a restart.
+
+#### Settings Tab — Web Login Section
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Web Username | `client` | Username required to log in to the web interface |
+| New Password | *(blank = keep current)* | Leave blank to keep the existing password |
+| Confirm Password | — | Must match New Password |
+
+The password is stored encrypted in `~/.config/truemonitor/config.json`. If both password fields are left blank when saving, the existing password is kept unchanged.
 
 ### Usage
 
