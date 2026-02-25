@@ -760,8 +760,10 @@ class TrueMonClientApp:
         self._pool_count = num_pools
         pool_rows = math.ceil(num_pools / 2)
 
+        # minsize ensures the row is always tall enough for the full pool card
+        # content including disk indicators.
         for r in range(pool_rows):
-            self.grid.rowconfigure(2 + r, weight=1)
+            self.grid.rowconfigure(2 + r, weight=1, minsize=250)
 
         for i, pool in enumerate(pools):
             row = 2 + i // 2
