@@ -956,6 +956,7 @@ class TrueMonitorApp:
 
         self._setup_styles()
         self._build_ui()
+        self.root.bind("<Configure>", self._on_window_resize)
 
         if self.config.get("host"):
             self._populate_settings()
@@ -1001,6 +1002,37 @@ class TrueMonitorApp:
     def _sf(self, base_size):
         """Return a font size scaled by the current font scale factor."""
         return max(6, int(round(base_size * self._font_scale)))
+
+    def _on_window_resize(self, event):
+        """Debounce window resize events, then update card font sizes."""
+        if event.widget is not self.root:
+            return
+        if hasattr(self, '_resize_after'):
+            self.root.after_cancel(self._resize_after)
+        self._resize_after = self.root.after(120, self._update_card_fonts)
+
+    def _update_card_fonts(self, force=False):
+        """Scale card fonts relative to current window width."""
+        w = self.root.winfo_width()
+        if w < 100:
+            return
+        new_scale = max(0.8, min(1.25, self._font_scale * w / self._base_w))
+        prev = getattr(self, '_dyn_scale', None)
+        if not force and prev is not None and abs(new_scale - prev) < 0.02:
+            return
+        self._dyn_scale = new_scale
+        def _fs(base):
+            return max(6, int(round(base * new_scale)))
+        s = ttk.Style()
+        s.configure("CardValue.TLabel", font=("Helvetica", _fs(28), "bold"))
+        s.configure("CardTitle.TLabel", font=("Helvetica", _fs(12), "bold"))
+        s.configure("CardSub.TLabel", font=("Helvetica", _fs(10)))
+        s.configure("Card.TLabel", font=("Helvetica", _fs(11)))
+        for card in self.pool_cards.values():
+            if card.get("map_btn"):
+                card["map_btn"].config(font=("Helvetica", _fs(8)))
+            if card.get("disk_label"):
+                card["disk_label"].config(font=("Helvetica", _fs(9)))
 
     # --- ttk styles ---
     def _setup_styles(self):
@@ -1403,7 +1435,7 @@ class TrueMonitorApp:
             f = tk.Frame(
                 self.grid, bg=COLORS["card"],
                 highlightbackground=COLORS["card_border"], highlightthickness=1,
-                padx=18, pady=14,
+                padx=18, pady=8,
             )
             f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
 
@@ -1439,22 +1471,22 @@ class TrueMonitorApp:
 
             # Disk health indicator row
             disk_frame = tk.Frame(f, bg=COLORS["card"])
-            disk_frame.pack(anchor="w", pady=(8, 0))
+            disk_frame.pack(anchor="w", pady=(3, 0))
             disk_label = tk.Label(
                 disk_frame, text="Disks:", bg=COLORS["card"],
                 fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)),
             )
-            disk_label.pack(side=tk.LEFT, padx=(0, 6))
+            disk_label.pack(side=tk.LEFT, padx=(0, 4))
 
             disk_rects = []
             disks = pool.get("disks", [])
             for disk in disks:
                 color = COLORS["critical"] if disk["has_error"] else COLORS["good"]
-                img = tk.PhotoImage(width=14, height=20)
-                img.put(color, to=(0, 0, 14, 20))
+                img = tk.PhotoImage(width=10, height=14)
+                img.put(color, to=(0, 0, 10, 14))
                 rect = tk.Label(disk_frame, image=img, bd=0, highlightthickness=0)
                 rect._img = img  # prevent garbage collection
-                rect.pack(side=tk.LEFT, padx=2)
+                rect.pack(side=tk.LEFT, padx=1)
                 _Tooltip(rect, disk["name"])
                 disk_rects.append(rect)
 
@@ -1462,7 +1494,7 @@ class TrueMonitorApp:
                 "frame": f, "value": val_lbl, "sub": sub_lbl,
                 "bar": bar, "bar_var": bar_var,
                 "disk_frame": disk_frame, "disk_rects": disk_rects,
-                "topology": topo, "map_btn": map_btn,
+                "disk_label": disk_label, "topology": topo, "map_btn": map_btn,
             }
 
         # Resize window to fit pool content
@@ -2465,6 +2497,7 @@ class TrueMonitorApp:
                         break
             if rebuild:
                 self._build_pool_cards(pools)
+                self._update_card_fonts(force=True)
             # Update each pool card
             for pool in pools:
                 name = pool.get("name", "unknown")
@@ -2499,7 +2532,7 @@ class TrueMonitorApp:
                 for i, rect in enumerate(card.get("disk_rects", [])):
                     if i < len(disks):
                         disk_col = COLORS["critical"] if disks[i]["has_error"] else COLORS["good"]
-                        rect._img.put(disk_col, to=(0, 0, 14, 20))
+                        rect._img.put(disk_col, to=(0, 0, 10, 14))
 
                 # Update stored topology for drive map button
                 topo = pool.get("topology", {})
