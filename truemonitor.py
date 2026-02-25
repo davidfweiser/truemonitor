@@ -920,7 +920,13 @@ class TrueMonitorApp:
         saved_geo = self.config.get("window_geometry")
         if saved_geo:
             try:
-                self.root.geometry(saved_geo)
+                _parts = saved_geo.split("x")
+                _gw = min(int(_parts[0]), sw - 20)
+                _rest = _parts[1].split("+")
+                _gh = min(int(_rest[0]), int(sh * 0.92))
+                _gx = max(0, min(int(_rest[1]) if len(_rest) > 1 else 0, sw - _gw - 20))
+                _gy = max(0, min(int(_rest[2]) if len(_rest) > 2 else 0, sh - _gh - 40))
+                self.root.geometry(f"{_gw}x{_gh}+{_gx}+{_gy}")
             except Exception:
                 self.root.geometry(f"{self._base_w}x{self._base_h}")
         else:
@@ -1465,17 +1471,14 @@ class TrueMonitorApp:
         max_h = int(sh * 0.92)
         self.root.update_idletasks()
         needed_h = self.root.winfo_reqheight() + 40
-        new_height = min(max(needed_h, self._base_h + pool_rows_total * 210), max_h)
+        new_height = min(max(needed_h, self._base_h + pool_rows_total * 260), max_h)
         cur_geo = self.root.geometry()
         try:
             cur_parts = cur_geo.split("x")
-            width = int(cur_parts[0])
-            cur_h = int(cur_parts[1].split("+")[0])
+            width = min(int(cur_parts[0]), sw - 20)
         except (ValueError, IndexError):
             width = self._base_w
-            cur_h = 0
-        if new_height > cur_h:
-            self.root.geometry(f"{width}x{new_height}")
+        self.root.geometry(f"{width}x{new_height}")
         self.root.minsize(min(560, sw - 80), min(400, sh - 80))
 
     def _show_drive_map(self, pool_name, topology):
