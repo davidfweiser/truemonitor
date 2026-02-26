@@ -753,6 +753,10 @@ class TrueNASClient:
                 msg   = alert.get("formatted", "") or alert.get("text", "")
                 if not msg:
                     msg = alert.get("klass", "") or "Unknown TrueNAS alert"
+                # Deprecation notices are informational — don't trigger sounds
+                # or modal dialogs for them.
+                if sev == "warning" and "deprecated" in msg.lower():
+                    sev = "info"
                 stats["system_alerts"].append({"id": aid, "severity": sev, "message": msg})
         except Exception as e:
             debug(f" system alerts error: {e}")

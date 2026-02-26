@@ -745,6 +745,10 @@ class TrueNASClient:
                     klass = alert.get("klass", "")
                     if not msg:
                         msg = klass or "Unknown TrueNAS alert"
+                    # Deprecation notices are informational — don't trigger
+                    # browser notifications or alert sounds for them.
+                    if severity == "warning" and "deprecated" in msg.lower():
+                        severity = "info"
                     stats["system_alerts"].append({
                         "id": alert_id,
                         "severity": severity,
