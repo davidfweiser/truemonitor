@@ -4,6 +4,8 @@ A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMon
 
 Four companion apps can display the same live data remotely: **TrueMonitor Web** (browser-based dashboard), **TrueMonClient** (Python desktop GUI), **TrueMonitor Text** (headless/SSH curses TUI), and **TrueMonClient iOS** (native iPhone app).
 
+![TrueMonitor Screenshot](Screenshot_TrueMonitor.png)
+
 ---
 
 ## Files
