@@ -428,6 +428,12 @@ final class DataModule: ObservableObject {
         SecItemDelete(query as CFDictionary)
         var addQuery = query
         addQuery[kSecValueData as String] = data
+        // AfterFirstUnlock allows background reconnects to read the key while
+        // the screen is locked (as long as the device has been unlocked once
+        // since boot). Without this the default WhenUnlocked policy causes
+        // Keychain reads to fail during background reconnects, falling back to
+        // the hardcoded "truemonitor" default and triggering wrong-key errors.
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         SecItemAdd(addQuery as CFDictionary, nil)
     }
 
