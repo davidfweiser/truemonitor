@@ -1,4 +1,4 @@
-# TrueMonitor v0.6
+# TrueMonitor v0.7
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMonitor provides a dark-themed interface that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
@@ -36,11 +36,12 @@ Four companion apps can display the same live data remotely: **TrueMonitor Web**
 
 #### Alerts Tab
 - Automatic alerts for configurable CPU temperature threshold, CPU usage >95%, and memory usage >95%
-- Pulls system alerts directly from TrueNAS (critical, warning, info levels)
+- Pulls system alerts directly from TrueNAS (critical, warning, info levels); dismissed TrueNAS alerts are skipped
+- INFO-level TrueNAS alerts (e.g. app update available) trigger the Alerts tab indicator
 - Popup dialogs with warning sounds for critical and warning alerts
 - Color-coded alert log with timestamps
 - Persistent alert history saved to disk
-- Alert tab flashes when new alerts arrive
+- Alert tab flashes when any new alert arrives (all severities)
 
 #### Settings Tab
 - **Connection**: IP address/hostname, API key or username/password authentication
@@ -75,7 +76,7 @@ A browser-based version of TrueMonitor with the same features and dark theme, se
 - Real-time updates pushed to all connected browser tabs via Server-Sent Events
 - Canvas-based scrolling graphs for network I/O and CPU temperature
 - Drive Map modal for full vdev topology
-- Browser Notification API used for critical/warning alerts
+- Browser Notification API used for critical, warning, and info alerts (including app update notifications)
 - HTTP on port **8088**, HTTPS on port **8089** (self-signed cert auto-generated)
 - Broadcasts to TrueMonClient instances using the same encrypted TCP protocol
 - Opens a browser tab automatically on launch
