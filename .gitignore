@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 .claude/
 CLAUDE.md
+
+# macOS
+.DS_Store
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
