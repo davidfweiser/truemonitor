@@ -16,7 +16,6 @@
 		A10007 /* MonitorConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007 /* MonitorConnection.swift */; };
 		A10008 /* MonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008 /* MonitorService.swift */; };
 		A10009 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009 /* NotificationService.swift */; };
-		A10023 /* BackgroundAudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023 /* BackgroundAudioService.swift */; };
 		A10010 /* MonitorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010 /* MonitorView.swift */; };
 		A10011 /* CPUCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011 /* CPUCard.swift */; };
 		A10012 /* MemoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* MemoryCard.swift */; };
@@ -29,6 +28,7 @@
 		A10019 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019 /* AppTheme.swift */; };
 		A10020 /* FormatBytes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020 /* FormatBytes.swift */; };
 		A10021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10021 /* Assets.xcassets */; };
+		A10023 /* BackgroundAudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023 /* BackgroundAudioService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,7 +42,6 @@
 		B10007 /* MonitorConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorConnection.swift; sourceTree = "<group>"; };
 		B10008 /* MonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorService.swift; sourceTree = "<group>"; };
 		B10009 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		B10023 /* BackgroundAudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioService.swift; sourceTree = "<group>"; };
 		B10010 /* MonitorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorView.swift; sourceTree = "<group>"; };
 		B10011 /* CPUCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUCard.swift; sourceTree = "<group>"; };
 		B10012 /* MemoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryCard.swift; sourceTree = "<group>"; };
@@ -56,6 +55,7 @@
 		B10020 /* FormatBytes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatBytes.swift; sourceTree = "<group>"; };
 		B10021 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10022 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10023 /* BackgroundAudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,7 +207,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					E10001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -310,6 +310,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = R27KU7BQMW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -332,6 +333,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -372,6 +374,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = R27KU7BQMW;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -387,6 +390,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -399,7 +403,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R27KU7BQMW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TrueMonClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TrueMonClient;
@@ -415,9 +418,13 @@
 				MARKETING_VERSION = 0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.truemonitor.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -428,7 +435,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R27KU7BQMW;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TrueMonClient/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TrueMonClient;
@@ -444,9 +450,13 @@
 				MARKETING_VERSION = 0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.truemonitor.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

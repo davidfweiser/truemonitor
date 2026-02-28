@@ -6,29 +6,18 @@
 	<array>
 		<string>com.truemonitor.client.refresh</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>processing</string>
-		<string>audio</string>
-	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>TrueMonClient connects to your TrueMonitor server on your local network to receive system monitoring data.</string>
-	<key>CFBundleName</key>
-	<string>TrueMonClient</string>
 	<key>CFBundleDisplayName</key>
 	<string>TrueMonClient</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>TrueMonClient</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -37,6 +26,21 @@
 				<string>truemon</string>
 			</array>
 		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TrueMonClient connects to your TrueMonitor server on your local network to receive system monitoring data.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+		<string>audio</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 </dict>
 </plist>
