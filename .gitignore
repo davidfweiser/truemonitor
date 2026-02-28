@@ -6,7 +6,12 @@ CLAUDE.md
 # macOS
 .DS_Store
 
+# Python virtual environments
+venv/
+myenv/
+
 # Xcode user data
 *.xcuserstate
 xcuserdata/
 *.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/swiftpm/
