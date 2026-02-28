@@ -43,7 +43,7 @@ except ImportError:
     print("  pip install flask")
     raise SystemExit(1)
 
-APP_VERSION = "0.6"
+APP_VERSION = "0.7"
 WEB_DEFAULT_HOST = "0.0.0.0"
 WEB_DEFAULT_PORT = 8088  # HTTPS is always this + 1 (8089)
 
