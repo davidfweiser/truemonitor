@@ -745,6 +745,8 @@ class TrueNASClient:
             for alert in self.get_alerts():
                 if not isinstance(alert, dict):
                     continue
+                if alert.get("dismissed", False):
+                    continue
                 aid   = (alert.get("uuid") or alert.get("id") or
                          alert.get("klass", "") + ":" + alert.get("level", ""))
                 level = alert.get("level", "INFO").upper()

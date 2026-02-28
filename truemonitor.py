@@ -842,6 +842,8 @@ class TrueNASClient:
                 for alert in alerts:
                     if not isinstance(alert, dict):
                         continue
+                    if alert.get("dismissed", False):
+                        continue
                     alert_id = (alert.get("uuid") or alert.get("id") or
                                 alert.get("klass", "") + ":" + alert.get("level", ""))
                     level = alert.get("level", "INFO").upper()
@@ -1787,7 +1789,7 @@ class TrueMonitorApp:
         self.alert_count_lbl.config(text=f"{count} alert{'s' if count != 1 else ''}")
 
         # Flash the Alerts tab
-        if severity in ("critical", "warning"):
+        if severity != "resolved":
             self.notebook.tab(1, text="  Alerts *  ")
 
         # Sound

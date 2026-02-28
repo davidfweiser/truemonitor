@@ -732,6 +732,8 @@ class TrueNASClient:
                 for alert in alerts:
                     if not isinstance(alert, dict):
                         continue
+                    if alert.get("dismissed", False):
+                        continue
                     alert_id = (alert.get("uuid") or alert.get("id") or
                                 alert.get("klass", "") + ":" + alert.get("level", ""))
                     level = alert.get("level", "INFO").upper()
@@ -1562,7 +1564,7 @@ function appendAlert(d) {
   log.insertBefore(entry, log.firstChild);
   alertCount++;
   document.getElementById('alert-count-lbl').textContent = alertCount + ' alert' + (alertCount!==1?'s':'');
-  if (d.severity==='critical'||d.severity==='warning') {
+  if (d.severity==='critical'||d.severity==='warning'||d.severity==='info') {
     unreadAlerts++; updateAlertBadge();
     if (Notification.permission==='granted') {
       new Notification('TrueMonitor Alert', { body: prefix + ': ' + d.message, icon: '/favicon.ico' });
