@@ -15,3 +15,4 @@ myenv/
 xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcworkspace/xcshareddata/swiftpm/
+WorkspaceSettings.xcsettings
