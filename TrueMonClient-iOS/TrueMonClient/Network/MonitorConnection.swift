@@ -47,7 +47,9 @@ final class MonitorConnection {
 
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.enableKeepalive = true
-        tcpOptions.keepaliveIdle = 10
+        tcpOptions.keepaliveIdle = 10       // first probe after 10s of inactivity
+        tcpOptions.keepaliveInterval = 5    // probe every 5s after that
+        tcpOptions.keepaliveCount = 3       // declare dead after 3 missed probes (~25s total)
 
         let params = NWParameters(tls: nil, tcp: tcpOptions)
 

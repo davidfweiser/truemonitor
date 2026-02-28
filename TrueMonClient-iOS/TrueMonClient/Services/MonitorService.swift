@@ -138,7 +138,7 @@ final class DataModule: ObservableObject {
         switch connectionState {
         case .connected:
             // If connected but data is stale, force reconnect
-            if let last = lastDataReceived, Date().timeIntervalSince(last) > 30 {
+            if let last = lastDataReceived, Date().timeIntervalSince(last) > 60 {
                 connection.disconnect()
                 connect()
             }
@@ -322,7 +322,9 @@ final class DataModule: ObservableObject {
 
     private func checkWatchdog() {
         guard connectionState == .connected, shouldAutoReconnect else { return }
-        guard let last = lastDataReceived, Date().timeIntervalSince(last) > 30 else { return }
+        // 60s threshold: gives 12× margin over the default 5s broadcast rate and
+        // tolerates slow TrueNAS API cycles without triggering a false reconnect.
+        guard let last = lastDataReceived, Date().timeIntervalSince(last) > 60 else { return }
         connection.disconnect()
         connect()
     }
