@@ -75,6 +75,9 @@ final class DataModule: ObservableObject {
     private var pathMonitor: NWPathMonitor?
     private var lastDataReceived: Date?
     private var watchdogTimer: Timer?
+    // Host used to create the current NWConnection; used to detect IP changes.
+    private var activeHost: String = ""
+    private var cancellables = Set<AnyCancellable>()
 
     private var lastAlertTimes: [String: Date] = [:]
     private let alertCooldown: TimeInterval = 300 // 5 minutes
@@ -110,6 +113,21 @@ final class DataModule: ObservableObject {
         setupConnectionCallbacks()
         startNetworkMonitor()
 
+        // When the user types a new server address, reconnect automatically once
+        // they stop editing (1 s debounce avoids reconnecting on every keystroke).
+        $serverHost
+            .dropFirst()
+            .debounce(for: .seconds(1.0), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] newHost in
+                guard let self = self, self.shouldAutoReconnect, !newHost.isEmpty else { return }
+                guard newHost != self.activeHost else { return }
+                self.reconnectTask?.cancel()
+                self.reconnectTask = nil
+                self.connect()
+            }
+            .store(in: &cancellables)
+
         // Auto-connect on launch if a host is already configured
         if !serverHost.isEmpty {
             Task { @MainActor [weak self] in
@@ -129,6 +147,7 @@ final class DataModule: ObservableObject {
         let passphrase = loadPassphrase() ?? "truemonitor"
         shouldAutoReconnect = true
         errorMessage = nil
+        activeHost = serverHost
         connection.connect(host: serverHost, port: serverPort, passphrase: passphrase)
     }
 
@@ -144,6 +163,13 @@ final class DataModule: ObservableObject {
             }
             return
         case .connecting:
+            // If the target host changed while we were connecting to the old host,
+            // cancel the stale attempt and start fresh with the new address.
+            if activeHost != serverHost {
+                reconnectTask?.cancel()
+                reconnectTask = nil
+                connect()
+            }
             return
         default:
             reconnectTask?.cancel()
