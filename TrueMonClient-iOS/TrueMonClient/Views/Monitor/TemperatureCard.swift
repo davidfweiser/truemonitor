@@ -51,32 +51,33 @@ struct TemperatureCard: View {
                         )
                         .foregroundStyle(AppTheme.critical.opacity(0.08))
 
-                        // Area fill under temp line
+                        // Temperature area + line as a single series
                         ForEach(Array(tempHistory.enumerated()), id: \.offset) { i, val in
                             AreaMark(
                                 x: .value("Time", i),
                                 y: .value("Temp", val)
                             )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [colorForTemp(val).opacity(0.2), colorForTemp(val).opacity(0.02)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .interpolationMethod(.monotone)
-                        }
+                            .interpolationMethod(.catmullRom)
 
-                        // Temperature line
-                        ForEach(Array(tempHistory.enumerated()), id: \.offset) { i, val in
                             LineMark(
                                 x: .value("Time", i),
                                 y: .value("Temp", val)
                             )
-                            .foregroundStyle(colorForTemp(val))
-                            .interpolationMethod(.monotone)
+                            .interpolationMethod(.catmullRom)
                             .lineStyle(StrokeStyle(lineWidth: 2.5))
                         }
+                        .foregroundStyle(
+                            .linearGradient(
+                                stops: [
+                                    .init(color: AppTheme.good, location: 0),
+                                    .init(color: AppTheme.warning, location: 0.5),
+                                    .init(color: AppTheme.critical, location: 1.0)
+                                ],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .opacity(0.8)
 
                         // Threshold markers
                         RuleMark(y: .value("Warm", 60))

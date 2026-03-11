@@ -47,50 +47,41 @@ struct NetworkCard: View {
             if !rxHistory.isEmpty || !txHistory.isEmpty {
                 Chart {
                     ForEach(Array(rxHistory.enumerated()), id: \.offset) { i, val in
-                        AreaMark(
-                            x: .value("Time", i),
-                            y: .value("Bytes", val)
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [AppTheme.good.opacity(0.3), AppTheme.good.opacity(0.05)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .interpolationMethod(.monotone)
-
                         LineMark(
                             x: .value("Time", i),
                             y: .value("Bytes", val)
                         )
-                        .foregroundStyle(AppTheme.good)
-                        .interpolationMethod(.monotone)
+                        .foregroundStyle(by: .value("Series", "RX"))
+                        .interpolationMethod(.catmullRom)
                         .lineStyle(StrokeStyle(lineWidth: 2))
+
+                        AreaMark(
+                            x: .value("Time", i),
+                            y: .value("Bytes", val)
+                        )
+                        .foregroundStyle(by: .value("Series", "RX"))
+                        .interpolationMethod(.catmullRom)
+                        .opacity(0.15)
                     }
                     ForEach(Array(txHistory.enumerated()), id: \.offset) { i, val in
-                        AreaMark(
-                            x: .value("Time", i),
-                            y: .value("Bytes", val)
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [AppTheme.accent.opacity(0.2), AppTheme.accent.opacity(0.02)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .interpolationMethod(.monotone)
-
                         LineMark(
                             x: .value("Time", i),
                             y: .value("Bytes", val)
                         )
-                        .foregroundStyle(AppTheme.accent)
-                        .interpolationMethod(.monotone)
+                        .foregroundStyle(by: .value("Series", "TX"))
+                        .interpolationMethod(.catmullRom)
                         .lineStyle(StrokeStyle(lineWidth: 2))
+
+                        AreaMark(
+                            x: .value("Time", i),
+                            y: .value("Bytes", val)
+                        )
+                        .foregroundStyle(by: .value("Series", "TX"))
+                        .interpolationMethod(.catmullRom)
+                        .opacity(0.1)
                     }
                 }
+                .chartForegroundStyleScale(["RX": AppTheme.good, "TX": AppTheme.accent])
                 .chartLegend(.hidden)
                 .chartXAxis(.hidden)
                 .chartYAxis {
