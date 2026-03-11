@@ -49,6 +49,13 @@ struct DiskInfo: Codable, Identifiable {
     let name: String
     let hasError: Bool
 
+    /// Short display name: strips /dev/ prefix and path components.
+    var shortName: String {
+        let n = name.replacingOccurrences(of: "/dev/", with: "")
+        if let last = n.split(separator: "/").last { return String(last) }
+        return n
+    }
+
     enum CodingKeys: String, CodingKey {
         case name
         case hasError = "has_error"

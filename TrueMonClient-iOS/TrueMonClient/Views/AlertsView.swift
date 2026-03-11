@@ -7,25 +7,32 @@ struct AlertsView: View {
         VStack(spacing: 0) {
             if data.alerts.isEmpty {
                 Spacer()
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     Image(systemName: "checkmark.shield")
-                        .font(.system(size: 48))
-                        .foregroundColor(AppTheme.good)
+                        .font(.system(size: 52))
+                        .foregroundStyle(AppTheme.good.opacity(0.6))
+                        .slowPulseEffect(isActive: true)
                     Text("No Alerts")
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
                         .foregroundColor(AppTheme.textDim)
+                    Text("You're all clear")
+                        .font(.subheadline)
+                        .foregroundColor(AppTheme.textDim.opacity(0.6))
                 }
                 Spacer()
             } else {
                 HStack {
                     Text("\(data.alerts.count) alert\(data.alerts.count == 1 ? "" : "s")")
-                        .font(.caption)
+                        .font(.caption.weight(.medium))
                         .foregroundColor(AppTheme.textDim)
+                        .contentTransition(.numericText())
                     Spacer()
-                    Button("Clear All") {
+                    Button {
                         data.clearAlerts()
+                    } label: {
+                        Label("Clear All", systemImage: "trash")
+                            .font(.caption.weight(.medium))
                     }
-                    .font(.caption)
                     .tint(AppTheme.critical)
                 }
                 .padding(.horizontal)
@@ -40,6 +47,13 @@ struct AlertsView: View {
                                     .padding(.vertical, 2)
                             )
                             .listRowSeparator(.hidden)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    data.removeAlert(id: alert.id)
+                                } label: {
+                                    Label("Dismiss", systemImage: "trash")
+                                }
+                            }
                     }
                 }
                 .listStyle(.plain)
@@ -55,10 +69,11 @@ struct AlertsView: View {
     @ViewBuilder
     private func alertRow(_ alert: AlertItem) -> some View {
         HStack(spacing: 12) {
-            // Colored left border
-            RoundedRectangle(cornerRadius: 2)
-                .fill(colorForLevel(alert.level))
-                .frame(width: 4)
+            // Colored severity icon
+            Image(systemName: iconForLevel(alert.level))
+                .font(.system(size: 16))
+                .foregroundColor(colorForLevel(alert.level))
+                .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(alert.message)
@@ -75,6 +90,14 @@ struct AlertsView: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+
+    private func iconForLevel(_ level: AlertLevel) -> String {
+        switch level {
+        case .info:     return "info.circle.fill"
+        case .warning:  return "exclamationmark.triangle.fill"
+        case .critical: return "xmark.octagon.fill"
+        }
     }
 
     private func colorForLevel(_ level: AlertLevel) -> Color {

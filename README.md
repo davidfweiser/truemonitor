@@ -1,4 +1,4 @@
-# TrueMonitor v0.7
+# TrueMonitor v0.8
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMonitor provides a dark-themed interface that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
@@ -380,13 +380,19 @@ A native iPhone app that connects to TrueMonitor's broadcast server and displays
 
 ### Features
 
+- **Native tab bar** — Standard iOS `TabView` with automatic Liquid Glass chrome on iOS 26; large navigation titles
 - **Monitor tab** — CPU, Memory, Network, Temperature, and ZFS pool cards with live data
-- **Network chart** — Dual-color line graph (green = RX, cyan = TX) with 60-point history
-- **Temperature chart** — Line graph with color-coded warning/critical zone overlays
-- **Drive Map** — Vdev topology sheet per pool showing disk health; Drive Map and Done buttons styled in dark navy blue
-- **Alerts tab** — Color-coded alert list (info/warning/critical) with timestamps, including TrueNAS system alerts forwarded from the server
-- **Settings tab** — Server host/port/key, alert thresholds, connect/disconnect button
-- **Hamburger menu navigation** — Floating glass menu button with animated drawer, replacing the system tab bar so content fills the full screen
+- **Circular gauges** — CPU, Memory, and Pool cards use `Gauge` rings with gradient tints instead of flat progress bars
+- **Animated metrics** — All numeric values use `.contentTransition(.numericText())` for smooth tick-up/down animations
+- **SF Symbol effects** — Pulsing icons on error disks, variable-color animation on connection status, thermometer icon changes with temperature (iOS 17+)
+- **Network chart** — Area-filled dual-color graph (green = RX, cyan = TX) with 60-point history
+- **Temperature chart** — Area-filled line graph with color-coded warning/critical zone overlays and dynamic thermometer icon
+- **Drive Map** — Vdev topology sheet per pool with glass card backgrounds (iOS 26), pulsing error indicators, and capsule error badges
+- **Disk health grid** — Pool cards show a `LazyVGrid` of named drive icons instead of plain dots
+- **Alerts tab** — Severity icons (info/warning/critical) with swipe-to-delete on individual alerts
+- **Settings tab** — Section headers with SF Symbol icons, animated connection status indicator
+- **Mesh gradient background** — Organic multi-point `MeshGradient` on iOS 18+, falling back to linear gradient on earlier versions
+- **Rounded metric font** — `.rounded` font design for a modern dashboard feel
 - **iOS 26 Liquid Glass** — Glass cards and panels using the native `.glassEffect()` API on iOS 26, with graceful fallback on earlier versions
 - **Always-on background monitoring** — Silent audio loop keeps the TCP connection alive while the screen is off; BGProcessingTask fires every 15 minutes as a safety net
 - **TCP keepalive** — Connection probes every 10 seconds so dead connections are detected quickly without waiting for a timeout
@@ -438,7 +444,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 - **DataModule** - `@MainActor` singleton managing connection lifecycle, data watchdog, auto-reconnect, 60-point history buffers, alert evaluation, and Keychain passphrase storage
 - **DisplayModule** - UI-only state (selected view, scene lifecycle hooks); sleeps when screen is off while DataModule keeps running
 - **BackgroundAudioService** - Silent audio loop (AVAudioSession `.playback`) that prevents iOS from suspending the app when the screen is off
-- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live graphs; glass hamburger menu for navigation
+- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live area/line graphs; native TabView with Liquid Glass on iOS 26; circular gauges, animated numeric transitions, and SF Symbol effects
 
 ---
 

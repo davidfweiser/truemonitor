@@ -394,6 +394,11 @@ final class DataModule: ObservableObject {
         notificationService.postAlert(alert)
     }
 
+    func removeAlert(id: UUID) {
+        alerts.removeAll { $0.id == id }
+        saveAlerts()
+    }
+
     func clearAlerts(fromServer: Bool = false) {
         alerts.removeAll()
         lastAlertTimes.removeAll()

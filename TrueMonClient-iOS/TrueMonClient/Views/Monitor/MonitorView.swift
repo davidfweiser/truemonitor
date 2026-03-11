@@ -5,7 +5,7 @@ struct MonitorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 // Connection status header
                 connectionHeader
 
@@ -48,18 +48,19 @@ struct MonitorView: View {
                         .foregroundColor(AppTheme.textDim)
                         .padding(.top, 40)
                 } else if case .disconnected = data.connectionState {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 16) {
                         Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                            .font(.system(size: 48))
-                            .foregroundColor(AppTheme.textDim)
+                            .font(.system(size: 52))
+                            .foregroundStyle(AppTheme.textDim.opacity(0.6))
+                            .pulseEffect(isActive: true)
                         Text("Not Connected")
-                            .font(.headline)
+                            .font(.title3.weight(.semibold))
                             .foregroundColor(AppTheme.textDim)
                         Text("Go to Settings to configure and connect")
-                            .font(.caption)
-                            .foregroundColor(AppTheme.textDim)
+                            .font(.subheadline)
+                            .foregroundColor(AppTheme.textDim.opacity(0.7))
                     }
-                    .padding(.top, 60)
+                    .padding(.top, 80)
                 }
             }
             .padding(.horizontal)
@@ -71,12 +72,14 @@ struct MonitorView: View {
     }
 
     private var connectionHeader: some View {
-        HStack {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
+        HStack(spacing: 6) {
+            Image(systemName: connectionIcon)
+                .font(.system(size: 11))
+                .foregroundStyle(statusColor)
+                .variableColorEffect(isActive: data.connectionState == .connecting)
+
             Text(data.connectionState.label)
-                .font(.caption)
+                .font(.caption.weight(.medium))
                 .foregroundColor(AppTheme.textDim)
 
             Spacer()
@@ -89,6 +92,15 @@ struct MonitorView: View {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    private var connectionIcon: String {
+        switch data.connectionState {
+        case .connected:    return "circle.fill"
+        case .connecting:   return "antenna.radiowaves.left.and.right"
+        case .disconnected: return "circle"
+        case .failed:       return "exclamationmark.circle.fill"
+        }
     }
 
     private var statusColor: Color {
@@ -105,7 +117,7 @@ struct MonitorView: View {
         HStack {
             if let host = stats.hostname {
                 Label(host, systemImage: "server.rack")
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundColor(AppTheme.accent)
             }
             Spacer()

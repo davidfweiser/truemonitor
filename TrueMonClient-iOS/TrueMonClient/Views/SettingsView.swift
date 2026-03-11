@@ -40,7 +40,7 @@ struct SettingsView: View {
                         data.savePassphrase(newValue)
                     }
             } header: {
-                Text("Connection")
+                Label("Connection", systemImage: "network")
             }
 
             // Connect / Disconnect
@@ -68,15 +68,17 @@ struct SettingsView: View {
                         }
                         Spacer()
                     }
+                    .font(.body.weight(.medium))
                 }
 
                 HStack {
                     Text("Status")
                         .foregroundColor(AppTheme.textDim)
                     Spacer()
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
+                    Image(systemName: statusIcon)
+                        .font(.system(size: 10))
+                        .foregroundColor(statusColor)
+                        .variableColorEffect(isActive: data.connectionState == .connecting)
                     Text(data.connectionState.label)
                         .font(.caption)
                         .foregroundColor(AppTheme.textDim)
@@ -104,7 +106,7 @@ struct SettingsView: View {
                 Toggle("Memory Usage Alerts (>95%)", isOn: $data.memoryAlertEnabled)
                     .tint(AppTheme.accent)
             } header: {
-                Text("Alert Thresholds")
+                Label("Alert Thresholds", systemImage: "bell.badge")
             }
 
             // About
@@ -138,7 +140,7 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text("About")
+                Label("About", systemImage: "info.circle")
             }
         }
         .scrollContentBackground(.hidden)
@@ -179,6 +181,15 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var statusIcon: String {
+        switch data.connectionState {
+        case .connected:    return "circle.fill"
+        case .connecting:   return "antenna.radiowaves.left.and.right"
+        case .disconnected: return "circle"
+        case .failed:       return "exclamationmark.circle.fill"
         }
     }
 
