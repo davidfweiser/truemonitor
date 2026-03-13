@@ -60,7 +60,7 @@ except ImportError:
     print("  pip install websocket-client")
     raise SystemExit(1)
 
-APP_VERSION = "0.8"
+APP_VERSION = "0.8.1"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -1544,21 +1544,40 @@ def draw_alerts(win, state):
 def poll_loop(client, state, config, stop_event):
     interval       = config.get("interval", 5)
     temp_threshold = config.get("temp_threshold", 82)
+    backoff = 0
+    fail_count = 0
 
     while not stop_event.is_set():
+        if backoff > 0:
+            with state.lock:
+                state.last_error = f"Reconnecting in {backoff}s…"
+            debug(f"Reconnecting in {backoff}s…")
+            if stop_event.wait(backoff):
+                break
+            with state.lock:
+                state.last_error = "Reconnecting…"
+            client._ws = None
         try:
             stats = client.fetch_all_stats()
             state.check_alerts(stats, temp_threshold)
             with state.lock:
                 state.stats        = stats
                 state.last_updated = datetime.now()
-                state.last_error   = None
+                if fail_count > 0:
+                    state.last_error = "Reconnected"
+                else:
+                    state.last_error = None
             if state.broadcast_server:
                 state.broadcast_server.send_stats(stats)
+            backoff = 0
+            fail_count = 0
         except Exception as e:
+            fail_count += 1
+            backoff = min(60, 5 * (2 ** (fail_count - 1)))
             with state.lock:
-                state.last_error = str(e)
-            debug(f"poll error: {e}")
+                state.last_error = f"Connection lost: {e}"
+            debug(f"poll error (attempt {fail_count}): {e}")
+            continue
         stop_event.wait(interval)
 
 

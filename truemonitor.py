@@ -33,7 +33,7 @@ except ImportError:
     print("  pip install websocket-client")
     raise SystemExit(1)
 
-APP_VERSION = "0.8"
+APP_VERSION = "0.8.1"
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "truemonitor")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
@@ -2387,17 +2387,42 @@ class TrueMonitorApp:
         self.poll_thread.start()
 
     def _poll(self):
+        backoff = 0
+        fail_count = 0
         while self.polling and self.client:
+            if backoff > 0:
+                self.root.after(
+                    0, lambda b=backoff: self.footer.config(
+                        text=f"Reconnecting in {b}s…",
+                        fg=COLORS["warning"]))
+                for _ in range(backoff * 10):
+                    if not self.polling:
+                        return
+                    time.sleep(0.1)
+                self.root.after(
+                    0, lambda: self.footer.config(
+                        text="Reconnecting…", fg=COLORS["warning"]))
+                self.client._ws = None
             try:
                 stats = self.client.fetch_all_stats()
                 self.root.after(0, lambda s=stats: self._refresh(s))
                 if self.broadcast_server:
                     self.broadcast_server.send_stats(stats)
                     self.root.after(0, self._update_broadcast_status)
+                if fail_count > 0:
+                    self.root.after(
+                        0, lambda: self.footer.config(
+                            text="Reconnected", fg=COLORS["good"]))
+                backoff = 0
+                fail_count = 0
             except Exception as e:
+                fail_count += 1
+                backoff = min(60, 5 * (2 ** (fail_count - 1)))
                 self.root.after(
                     0, lambda msg=str(e): self.footer.config(
-                        text=f"Poll error: {msg}", fg=COLORS["critical"]))
+                        text=f"Connection lost: {msg}", fg=COLORS["critical"]))
+                debug(f"Poll error (attempt {fail_count}): {e}")
+                continue
             time.sleep(self.config.get("interval", 5))
 
     # --- UI refresh ---

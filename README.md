@@ -1,4 +1,4 @@
-# TrueMonitor v0.8
+# TrueMonitor v0.8.1
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMonitor provides a dark-themed interface that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
@@ -417,7 +417,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 
 ### truemonitor.py / truemonitor-web.py
 
-- **TrueNASClient** - WebSocket JSON-RPC 2.0 client: persistent `wss://` connection, API key or password auth, auto-reconnect on network errors, multi-format reporting fallback, data parsing for CPU, memory, network, temperature, pools, and system alerts
+- **TrueNASClient** - WebSocket JSON-RPC 2.0 client: persistent `wss://` connection, API key or password auth, auto-reconnect with exponential backoff on network errors, multi-format reporting fallback, data parsing for CPU, memory, network, temperature, pools, and system alerts
 - **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
 - **TrueMonitorApp** *(truemonitor.py)* - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, persistent window size/position across launches, and dynamic card font scaling on window resize
 - **TrueMonitorWebApp** *(truemonitor-web.py)* - Flask web server with Server-Sent Events for real-time browser updates; embeds a full HTML/CSS/JS dashboard; runs HTTP on the configured port and HTTPS on port+1 with an auto-generated self-signed certificate

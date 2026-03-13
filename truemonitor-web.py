@@ -43,7 +43,7 @@ except ImportError:
     print("  pip install flask")
     raise SystemExit(1)
 
-APP_VERSION = "0.8"
+APP_VERSION = "0.8.1"
 WEB_DEFAULT_HOST = "0.0.0.0"
 WEB_DEFAULT_PORT = 8088  # HTTPS is always this + 1 (8089)
 
@@ -2268,13 +2268,32 @@ class TrueMonitorWebApp:
         self.poll_thread.start()
 
     def _poll(self):
+        backoff = 0
+        fail_count = 0
         while self.polling and self.client:
+            if backoff > 0:
+                self._set_status(f"Reconnecting in {backoff}s…", "connecting")
+                debug(f"Reconnecting in {backoff}s…")
+                for _ in range(backoff * 10):
+                    if not self.polling:
+                        return
+                    time.sleep(0.1)
+                self._set_status("Reconnecting…", "connecting")
+                self.client._ws = None
             try:
                 stats = self.client.fetch_all_stats()
                 self._process_stats(stats)
+                if fail_count > 0:
+                    name = stats.get("hostname", "TrueNAS")
+                    self._set_status(f"Connected to {name}", "ok")
+                backoff = 0
+                fail_count = 0
             except Exception as e:
-                debug(f"Poll error: {e}")
-                self._push_event("status", {"text": f"Poll error: {e}", "state": "err"})
+                fail_count += 1
+                backoff = min(60, 5 * (2 ** (fail_count - 1)))
+                self._set_status(f"Connection lost: {e}", "err")
+                debug(f"Poll error (attempt {fail_count}): {e}")
+                continue
             time.sleep(self.config.get("interval", 5))
 
     def _process_stats(self, stats):
