@@ -188,15 +188,33 @@ class MonitorClient:
         return data
 
     def _recv_loop(self):
-        retry_delay = 5
+        fail_count = 0
         stats_count = 0
         while self._running:
             self._sock = None
+            backoff = min(60, 5 * (2 ** (fail_count - 1))) if fail_count > 0 else 0
+            if backoff > 0:
+                debug(f"MonitorClient: reconnecting in {backoff}s")
+                for _ in range(backoff * 10):
+                    if not self._running:
+                        return
+                    time.sleep(0.1)
             try:
                 debug(f"MonitorClient: connecting to {self.host}:{self.port}")
                 self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self._sock.settimeout(10.0)
                 self._sock.connect((self.host, self.port))
+                # TCP keepalive so dead connections are detected quickly.
+                try:
+                    self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    if hasattr(socket, "TCP_KEEPIDLE"):
+                        self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 10)
+                    if hasattr(socket, "TCP_KEEPINTVL"):
+                        self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
+                    if hasattr(socket, "TCP_KEEPCNT"):
+                        self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+                except Exception:
+                    pass
                 self._sock.settimeout(10.0)
                 debug(f"MonitorClient: connected to {self.host}:{self.port}")
 
@@ -219,6 +237,7 @@ class MonitorClient:
                 self._sock.settimeout(60.0)
 
                 self.on_connected()
+                fail_count = 0
                 fernet = self._get_fernet()
                 stats_count = 0
                 while self._running:
@@ -273,9 +292,8 @@ class MonitorClient:
                     self._sock = None
 
             if self._running:
+                fail_count += 1
                 self.on_disconnected()
-                debug(f"MonitorClient: reconnecting in {retry_delay}s")
-                time.sleep(retry_delay)
 
 
 # ---------------------------------------------------------------------------
