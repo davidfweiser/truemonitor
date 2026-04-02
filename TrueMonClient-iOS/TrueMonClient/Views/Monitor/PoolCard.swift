@@ -5,7 +5,7 @@ struct PoolCard: View {
     @State private var showDriveMap = false
 
     var body: some View {
-        CardContainer(title: pool.name) {
+        CardContainer(title: pool.name, accentColor: AppTheme.poolAccent) {
             if let pct = pool.percent {
                 HStack(alignment: .center, spacing: 16) {
                     // Circular gauge
@@ -13,31 +13,32 @@ struct PoolCard: View {
                         Image(systemName: "internaldrive")
                     } currentValueLabel: {
                         Text("\(Int(pct))")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundColor(colorForPercent(pct))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(neonColorForPercent(pct))
                             .contentTransition(.numericText())
                     }
                     .gaugeStyle(.accessoryCircular)
-                    .tint(Gradient(colors: [AppTheme.good, AppTheme.warning, AppTheme.critical]))
+                    .tint(Gradient(colors: [AppTheme.purple, AppTheme.magenta, AppTheme.critical]))
                     .scaleEffect(1.2)
                     .frame(width: 52, height: 52)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(String(format: "%.1f%%", pct))
                             .font(AppTheme.metricFont(size: 28))
-                            .foregroundColor(colorForPercent(pct))
+                            .foregroundColor(neonColorForPercent(pct))
+                            .shadow(color: neonColorForPercent(pct).opacity(0.3), radius: 6)
                             .contentTransition(.numericText())
 
                         HStack(spacing: 12) {
                             Label("Used: \(formatBytes(pool.used.map(Double.init)))", systemImage: "square.fill")
-                                .foregroundColor(colorForPercent(pct))
+                                .foregroundColor(neonColorForPercent(pct))
                             Label("Free: \(formatBytes(pool.available.map(Double.init)))", systemImage: "square")
                                 .foregroundColor(AppTheme.textDim)
                         }
-                        .font(.caption2)
+                        .font(.system(size: 10, design: .monospaced))
 
                         Text("Total: \(formatBytes(pool.total.map(Double.init)))")
-                            .font(.caption2)
+                            .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(AppTheme.textDim)
                     }
 
@@ -53,7 +54,8 @@ struct PoolCard: View {
                         VStack(spacing: 2) {
                             Image(systemName: "internaldrive.fill")
                                 .font(.system(size: 14))
-                                .foregroundColor(disk.hasError ? AppTheme.critical : AppTheme.good)
+                                .foregroundColor(disk.hasError ? AppTheme.critical : AppTheme.lime)
+                                .shadow(color: (disk.hasError ? AppTheme.critical : AppTheme.lime).opacity(0.4), radius: 4)
                                 .pulseEffect(isActive: disk.hasError)
                             Text(disk.shortName)
                                 .font(.system(size: 8, design: .monospaced))
@@ -70,11 +72,12 @@ struct PoolCard: View {
             Button {
                 showDriveMap = true
             } label: {
-                Label("Drive Map", systemImage: "internaldrive")
-                    .font(.caption.weight(.medium))
+                Label("DRIVE MAP", systemImage: "internaldrive")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(1)
             }
             .buttonStyle(.bordered)
-            .tint(AppTheme.accent)
+            .tint(AppTheme.purple)
             .padding(.top, 4)
             .sheet(isPresented: $showDriveMap) {
                 DriveMapSheet(poolName: pool.name, topology: pool.topology ?? [:])
@@ -82,9 +85,9 @@ struct PoolCard: View {
         }
     }
 
-    private func colorForPercent(_ pct: Double) -> Color {
-        if pct < 70 { return AppTheme.good }
-        if pct < 85 { return AppTheme.warning }
-        return AppTheme.critical
+    private func neonColorForPercent(_ pct: Double) -> Color {
+        if pct < 70 { return AppTheme.lime }
+        if pct < 85 { return AppTheme.gold }
+        return AppTheme.magenta
     }
 }

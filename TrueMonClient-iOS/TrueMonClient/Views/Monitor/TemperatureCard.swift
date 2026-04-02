@@ -6,7 +6,7 @@ struct TemperatureCard: View {
     let tempHistory: [Double]
 
     var body: some View {
-        CardContainer(title: "Temperature") {
+        CardContainer(title: "CPU Temp", accentColor: AppTheme.tempAccent) {
             if let temp = cpuTemp {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: thermometerIcon(temp))
@@ -17,14 +17,16 @@ struct TemperatureCard: View {
                     Text(String(format: "%.0f°C", temp))
                         .font(AppTheme.metricFont())
                         .foregroundColor(colorForTemp(temp))
+                        .shadow(color: colorForTemp(temp).opacity(0.3), radius: 8)
                         .contentTransition(.numericText())
 
                     Text(statusLabel(temp))
-                        .font(.callout.weight(.medium))
-                        .foregroundColor(colorForTemp(temp).opacity(0.8))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(colorForTemp(temp).opacity(0.12))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .tracking(1)
+                        .foregroundColor(colorForTemp(temp))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(colorForTemp(temp).opacity(0.15))
                         .clipShape(Capsule())
 
                     Spacer()
@@ -40,7 +42,7 @@ struct TemperatureCard: View {
                             yStart: .value("", 60),
                             yEnd: .value("", 80)
                         )
-                        .foregroundStyle(AppTheme.warning.opacity(0.08))
+                        .foregroundStyle(AppTheme.warning.opacity(0.06))
 
                         // Critical zone (80°C+)
                         RectangleMark(
@@ -49,9 +51,9 @@ struct TemperatureCard: View {
                             yStart: .value("", 80),
                             yEnd: .value("", 100)
                         )
-                        .foregroundStyle(AppTheme.critical.opacity(0.08))
+                        .foregroundStyle(AppTheme.critical.opacity(0.06))
 
-                        // Temperature area + line as a single series
+                        // Temperature area + line
                         ForEach(Array(tempHistory.enumerated()), id: \.offset) { i, val in
                             AreaMark(
                                 x: .value("Time", i),
@@ -70,7 +72,7 @@ struct TemperatureCard: View {
                             .linearGradient(
                                 stops: [
                                     .init(color: AppTheme.good, location: 0),
-                                    .init(color: AppTheme.warning, location: 0.5),
+                                    .init(color: AppTheme.orange, location: 0.5),
                                     .init(color: AppTheme.critical, location: 1.0)
                                 ],
                                 startPoint: .bottom,
@@ -81,10 +83,10 @@ struct TemperatureCard: View {
 
                         // Threshold markers
                         RuleMark(y: .value("Warm", 60))
-                            .foregroundStyle(AppTheme.warning.opacity(0.4))
+                            .foregroundStyle(AppTheme.warning.opacity(0.3))
                             .lineStyle(StrokeStyle(dash: [4, 4]))
                         RuleMark(y: .value("Hot", 80))
-                            .foregroundStyle(AppTheme.critical.opacity(0.4))
+                            .foregroundStyle(AppTheme.critical.opacity(0.3))
                             .lineStyle(StrokeStyle(dash: [4, 4]))
                     }
                     .chartXAxis(.hidden)
@@ -94,7 +96,7 @@ struct TemperatureCard: View {
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text("\(Int(v))°")
-                                        .font(.system(size: 9))
+                                        .font(.system(size: 9, design: .monospaced))
                                         .foregroundColor(AppTheme.textDim)
                                 }
                             }
@@ -109,12 +111,13 @@ struct TemperatureCard: View {
                             Spacer()
                             Label(String(format: "%.0f°C", hi), systemImage: "arrow.up")
                         }
-                        .font(.caption2)
+                        .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(AppTheme.textDim)
                     }
                 }
             } else {
                 Text("N/A")
+                    .font(.system(.body, design: .monospaced))
                     .foregroundColor(AppTheme.textDim)
             }
         }
@@ -128,14 +131,14 @@ struct TemperatureCard: View {
 
     private func colorForTemp(_ t: Double) -> Color {
         if t < 60 { return AppTheme.good }
-        if t < 80 { return AppTheme.warning }
+        if t < 80 { return AppTheme.orange }
         return AppTheme.critical
     }
 
     private func statusLabel(_ t: Double) -> String {
-        if t < 60 { return "Normal" }
-        if t < 80 { return "Warm" }
-        return "Hot"
+        if t < 60 { return "NORMAL" }
+        if t < 80 { return "WARM" }
+        return "HOT"
     }
 
     private func thermometerIcon(_ t: Double) -> String {

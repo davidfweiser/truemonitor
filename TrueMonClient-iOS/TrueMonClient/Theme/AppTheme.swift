@@ -1,19 +1,37 @@
 import SwiftUI
 
-/// Dark color palette matching the desktop TrueMonitor COLORS dict.
+/// Cyberpunk neon color palette matching the web dashboard aesthetic.
 enum AppTheme {
-    static let bg         = Color(hex: 0x1a1a2e)
-    static let card       = Color(hex: 0x16213e)
-    static let cardBorder = Color(hex: 0x0f3460)
-    static let text       = Color(hex: 0xe0e0e0)
-    static let textDim    = Color(hex: 0x888899)
-    static let accent     = Color(hex: 0x4fc3f7)
+    // Core neon palette
+    static let cyan       = Color(hex: 0x00f0ff)
+    static let magenta    = Color(hex: 0xff00aa)
+    static let lime       = Color(hex: 0xaaff00)
+    static let orange     = Color(hex: 0xff6600)
+    static let purple     = Color(hex: 0xaa44ff)
+    static let blue       = Color(hex: 0x3366ff)
+    static let pink       = Color(hex: 0xff44aa)
+    static let gold       = Color(hex: 0xffcc00)
+
+    // Semantic colors (mapped to neon palette)
+    static let bg         = Color(hex: 0x06080f)
+    static let card       = Color(hex: 0x0a1228)
+    static let cardBorder = Color(hex: 0x0a1228).opacity(0.5)
+    static let text       = Color(hex: 0xe8eaf6)
+    static let textDim    = Color(hex: 0xc8d0f0, opacity: 0.5)
+    static let accent     = cyan
     static let good       = Color(hex: 0x66bb6a)
     static let warning    = Color(hex: 0xffa726)
     static let critical   = Color(hex: 0xef5350)
-    static let inputBg    = Color(hex: 0x0f3460)
-    static let button     = Color(hex: 0x533483)
+    static let inputBg    = Color(hex: 0x0f1940)
+    static let button     = purple
     static let buttonHover = Color(hex: 0x6a42a0)
+
+    // Card-specific accent colors
+    static let cpuAccent  = cyan
+    static let memAccent  = magenta
+    static let netAccent  = lime
+    static let tempAccent = orange
+    static let poolAccent = purple
 
     static var backgroundGradient: some View {
         if #available(iOS 18.0, *) {
@@ -23,18 +41,18 @@ enum AppTheme {
                     [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
                     [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
                 ], colors: [
-                    Color(hex: 0x0a0e1a), Color(hex: 0x0d1428), Color(hex: 0x0a1020),
-                    Color(hex: 0x121838), Color(hex: 0x1a1a3e), Color(hex: 0x0f1e38),
-                    Color(hex: 0x0a1020), Color(hex: 0x0d1830), Color(hex: 0x0a1628)
+                    Color(hex: 0x06080f), Color(hex: 0x080c18), Color(hex: 0x06080f),
+                    Color(hex: 0x0a1228), Color(hex: 0x0c1020), Color(hex: 0x080e1c),
+                    Color(hex: 0x06080f), Color(hex: 0x0a0e1a), Color(hex: 0x06080f)
                 ])
             )
         } else {
             AnyView(
                 LinearGradient(
                     colors: [
-                        Color(hex: 0x0d1020),
-                        Color(hex: 0x1a1a3e),
-                        Color(hex: 0x0a1628)
+                        Color(hex: 0x06080f),
+                        Color(hex: 0x0c1020),
+                        Color(hex: 0x06080f)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -43,9 +61,48 @@ enum AppTheme {
         }
     }
 
-    /// Large metric font — rounded design for a modern dashboard feel.
+    /// Large metric font — monospaced geometric for cyberpunk feel.
     static func metricFont(size: CGFloat = 36) -> Font {
-        .system(size: size, weight: .bold, design: .rounded)
+        .system(size: size, weight: .bold, design: .monospaced)
+    }
+
+    /// Neon glow shadow for a given color.
+    static func neonGlow(_ color: Color, radius: CGFloat = 12) -> some View {
+        EmptyView()
+            .shadow(color: color.opacity(0.4), radius: radius)
+    }
+}
+
+// MARK: - Neon card style
+
+struct NeonCardStyle: ViewModifier {
+    var accentColor: Color = AppTheme.cyan
+    var glowRadius: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if #available(iOS 26.0, *) {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .glassEffect(in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(AppTheme.card.opacity(0.85))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(accentColor.opacity(0.12), lineWidth: 1)
+                        )
+                        .shadow(color: accentColor.opacity(glowRadius > 0 ? 0.08 : 0), radius: glowRadius)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+extension View {
+    func neonCard(accent: Color = AppTheme.cyan, glow: CGFloat = 0) -> some View {
+        modifier(NeonCardStyle(accentColor: accent, glowRadius: glow))
     }
 }
 

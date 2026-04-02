@@ -6,7 +6,7 @@ struct MemoryCard: View {
     let memoryTotal: Int?
 
     var body: some View {
-        CardContainer(title: "Memory") {
+        CardContainer(title: "Memory", accentColor: AppTheme.memAccent) {
             if let pct = memoryPercent {
                 HStack(alignment: .center, spacing: 16) {
                     // Circular gauge
@@ -14,25 +14,26 @@ struct MemoryCard: View {
                         Image(systemName: "memorychip")
                     } currentValueLabel: {
                         Text("\(Int(pct))")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundColor(colorForPercent(pct))
+                            .font(.system(size: 18, weight: .bold, design: .monospaced))
+                            .foregroundColor(neonColorForPercent(pct))
                             .contentTransition(.numericText())
                     }
                     .gaugeStyle(.accessoryCircular)
-                    .tint(Gradient(colors: [AppTheme.good, AppTheme.warning, AppTheme.critical]))
+                    .tint(Gradient(colors: [AppTheme.magenta, AppTheme.purple, AppTheme.critical]))
                     .scaleEffect(1.4)
                     .frame(width: 64, height: 64)
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(String(format: "%.1f%%", pct))
                             .font(AppTheme.metricFont())
-                            .foregroundColor(colorForPercent(pct))
+                            .foregroundColor(neonColorForPercent(pct))
+                            .shadow(color: neonColorForPercent(pct).opacity(0.3), radius: 8)
                             .contentTransition(.numericText())
 
                         let used = formatBytes(memoryUsed.map(Double.init))
                         let total = formatBytes(memoryTotal.map(Double.init))
                         Text("\(used) / \(total)")
-                            .font(.caption)
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(AppTheme.textDim)
                     }
 
@@ -41,14 +42,15 @@ struct MemoryCard: View {
                 .animation(.easeInOut(duration: 0.4), value: pct)
             } else {
                 Text("N/A")
+                    .font(.system(.body, design: .monospaced))
                     .foregroundColor(AppTheme.textDim)
             }
         }
     }
 
-    private func colorForPercent(_ pct: Double) -> Color {
-        if pct < 70 { return AppTheme.good }
-        if pct < 90 { return AppTheme.warning }
+    private func neonColorForPercent(_ pct: Double) -> Color {
+        if pct < 70 { return AppTheme.magenta }
+        if pct < 90 { return AppTheme.gold }
         return AppTheme.critical
     }
 }

@@ -10,30 +10,32 @@ struct AlertsView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "checkmark.shield")
                         .font(.system(size: 52))
-                        .foregroundStyle(AppTheme.good.opacity(0.6))
+                        .foregroundStyle(AppTheme.lime.opacity(0.4))
                         .slowPulseEffect(isActive: true)
                     Text("No Alerts")
-                        .font(.title3.weight(.semibold))
+                        .font(.system(.title3, design: .monospaced).weight(.semibold))
                         .foregroundColor(AppTheme.textDim)
                     Text("You're all clear")
-                        .font(.subheadline)
+                        .font(.system(.subheadline, design: .monospaced))
                         .foregroundColor(AppTheme.textDim.opacity(0.6))
                 }
                 Spacer()
             } else {
                 HStack {
                     Text("\(data.alerts.count) alert\(data.alerts.count == 1 ? "" : "s")")
-                        .font(.caption.weight(.medium))
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .tracking(1)
                         .foregroundColor(AppTheme.textDim)
                         .contentTransition(.numericText())
                     Spacer()
                     Button {
                         data.clearAlerts()
                     } label: {
-                        Label("Clear All", systemImage: "trash")
-                            .font(.caption.weight(.medium))
+                        Label("CLEAR ALL", systemImage: "trash")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .tracking(1)
                     }
-                    .tint(AppTheme.critical)
+                    .tint(AppTheme.pink)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -43,7 +45,7 @@ struct AlertsView: View {
                         alertRow(alert)
                             .listRowBackground(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(.ultraThinMaterial)
+                                    .fill(AppTheme.card.opacity(0.6))
                                     .padding(.vertical, 2)
                             )
                             .listRowSeparator(.hidden)
@@ -69,22 +71,23 @@ struct AlertsView: View {
     @ViewBuilder
     private func alertRow(_ alert: AlertItem) -> some View {
         HStack(spacing: 12) {
-            // Colored severity icon
+            // Colored severity icon with glow
             Image(systemName: iconForLevel(alert.level))
                 .font(.system(size: 16))
                 .foregroundColor(colorForLevel(alert.level))
+                .shadow(color: colorForLevel(alert.level).opacity(0.4), radius: 4)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(alert.message)
-                    .font(.subheadline)
+                    .font(.system(.subheadline, design: .monospaced))
                     .foregroundColor(AppTheme.text)
 
                 Text(alert.timestamp, style: .date)
                     + Text(" ")
                     + Text(alert.timestamp, style: .time)
             }
-            .font(.caption)
+            .font(.system(size: 10, design: .monospaced))
             .foregroundColor(AppTheme.textDim)
 
             Spacer()
@@ -102,9 +105,9 @@ struct AlertsView: View {
 
     private func colorForLevel(_ level: AlertLevel) -> Color {
         switch level {
-        case .info:     return AppTheme.good
-        case .warning:  return AppTheme.warning
-        case .critical: return AppTheme.critical
+        case .info:     return AppTheme.cyan
+        case .warning:  return AppTheme.gold
+        case .critical: return AppTheme.magenta
         }
     }
 }

@@ -16,6 +16,7 @@ struct SettingsView: View {
                     .textContentType(.URL)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .font(.system(.body, design: .monospaced))
                     .foregroundColor(AppTheme.text)
                     .focused($focusedField, equals: .host)
                     .submitLabel(.next)
@@ -23,6 +24,7 @@ struct SettingsView: View {
 
                 TextField("Port", text: $portString)
                     .keyboardType(.numberPad)
+                    .font(.system(.body, design: .monospaced))
                     .foregroundColor(AppTheme.text)
                     .focused($focusedField, equals: .port)
                     .onChange(of: portString) { newValue in
@@ -32,6 +34,7 @@ struct SettingsView: View {
                     }
 
                 SecureField("Shared Key", text: $passphrase)
+                    .font(.system(.body, design: .monospaced))
                     .foregroundColor(AppTheme.text)
                     .focused($focusedField, equals: .key)
                     .submitLabel(.done)
@@ -40,7 +43,10 @@ struct SettingsView: View {
                         data.savePassphrase(newValue)
                     }
             } header: {
-                Label("Connection", systemImage: "network")
+                Label("CONNECTION", systemImage: "network")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundColor(AppTheme.cyan)
             }
 
             // Connect / Disconnect
@@ -55,38 +61,39 @@ struct SettingsView: View {
                     HStack {
                         Spacer()
                         if data.connectionState == .connected {
-                            Label("Disconnect", systemImage: "xmark.circle")
+                            Label("DISCONNECT", systemImage: "xmark.circle")
                                 .foregroundColor(AppTheme.critical)
                         } else if data.connectionState == .connecting {
                             ProgressView()
-                                .tint(AppTheme.accent)
+                                .tint(AppTheme.cyan)
                             Text("Connecting...")
-                                .foregroundColor(AppTheme.accent)
+                                .foregroundColor(AppTheme.cyan)
                         } else {
-                            Label("Connect", systemImage: "play.circle")
-                                .foregroundColor(AppTheme.good)
+                            Label("CONNECT", systemImage: "play.circle")
+                                .foregroundColor(AppTheme.lime)
                         }
                         Spacer()
                     }
-                    .font(.body.weight(.medium))
+                    .font(.system(.body, design: .monospaced).weight(.bold))
                 }
 
                 HStack {
                     Text("Status")
+                        .font(.system(.body, design: .monospaced))
                         .foregroundColor(AppTheme.textDim)
                     Spacer()
-                    Image(systemName: statusIcon)
-                        .font(.system(size: 10))
-                        .foregroundColor(statusColor)
-                        .variableColorEffect(isActive: data.connectionState == .connecting)
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+                        .shadow(color: statusColor.opacity(0.5), radius: 4)
                     Text(data.connectionState.label)
-                        .font(.caption)
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(AppTheme.textDim)
                 }
 
                 if let error = data.errorMessage {
                     Text(error)
-                        .font(.caption)
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(AppTheme.critical)
                 }
             }
@@ -95,52 +102,66 @@ struct SettingsView: View {
             Section {
                 VStack(alignment: .leading) {
                     Text("CPU Temp Threshold: \(Int(data.tempThreshold))°C")
+                        .font(.system(.body, design: .monospaced))
                         .foregroundColor(AppTheme.text)
                     Slider(value: $data.tempThreshold, in: 40...96, step: 1)
-                        .tint(AppTheme.accent)
+                        .tint(AppTheme.orange)
                 }
 
                 Toggle("CPU Usage Alerts (>95%)", isOn: $data.cpuAlertEnabled)
-                    .tint(AppTheme.accent)
+                    .font(.system(.body, design: .monospaced))
+                    .tint(AppTheme.cyan)
 
                 Toggle("Memory Usage Alerts (>95%)", isOn: $data.memoryAlertEnabled)
-                    .tint(AppTheme.accent)
+                    .font(.system(.body, design: .monospaced))
+                    .tint(AppTheme.cyan)
             } header: {
-                Label("Alert Thresholds", systemImage: "bell.badge")
+                Label("ALERT THRESHOLDS", systemImage: "bell.badge")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundColor(AppTheme.orange)
             }
 
             // About
             Section {
                 HStack {
                     Text("TrueMonClient")
+                        .font(.system(.body, design: .monospaced))
                         .foregroundColor(AppTheme.textDim)
                     Spacer()
                     Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
+                        .font(.system(.body, design: .monospaced))
                         .foregroundColor(AppTheme.textDim)
                 }
                 if let stats = data.stats {
                     if let hostname = stats.hostname {
                         HStack {
                             Text("Server")
+                                .font(.system(.body, design: .monospaced))
                                 .foregroundColor(AppTheme.textDim)
                             Spacer()
                             Text(hostname)
-                                .foregroundColor(AppTheme.textDim)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(AppTheme.cyan)
                         }
                     }
                     if let version = stats.version {
                         HStack {
                             Text("TrueMonitor")
+                                .font(.system(.body, design: .monospaced))
                                 .foregroundColor(AppTheme.textDim)
                             Spacer()
                             Text(version)
-                                .font(.caption)
+                                .font(.system(.caption, design: .monospaced))
                                 .foregroundColor(AppTheme.textDim)
                         }
                     }
                 }
             } header: {
-                Label("About", systemImage: "info.circle")
+                Label("ABOUT", systemImage: "info.circle")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundColor(AppTheme.purple)
             }
         }
         .scrollContentBackground(.hidden)
@@ -154,7 +175,7 @@ struct SettingsView: View {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") { focusedField = nil }
-                    .fontWeight(.semibold)
+                    .font(.system(.body, design: .monospaced).weight(.bold))
             }
         }
         .onAppear {
@@ -171,32 +192,23 @@ struct SettingsView: View {
                     }
                 } label: {
                     if data.connectionState == .connecting {
-                        ProgressView().tint(AppTheme.accent)
+                        ProgressView().tint(AppTheme.cyan)
                     } else if data.connectionState == .connected {
                         Label("Disconnect", systemImage: "xmark.circle.fill")
                             .foregroundStyle(AppTheme.critical)
                     } else {
                         Label("Connect", systemImage: "play.circle.fill")
-                            .foregroundStyle(AppTheme.good)
+                            .foregroundStyle(AppTheme.lime)
                     }
                 }
             }
         }
     }
 
-    private var statusIcon: String {
-        switch data.connectionState {
-        case .connected:    return "circle.fill"
-        case .connecting:   return "antenna.radiowaves.left.and.right"
-        case .disconnected: return "circle"
-        case .failed:       return "exclamationmark.circle.fill"
-        }
-    }
-
     private var statusColor: Color {
         switch data.connectionState {
-        case .connected:    return AppTheme.good
-        case .connecting:   return AppTheme.warning
+        case .connected:    return AppTheme.lime
+        case .connecting:   return AppTheme.gold
         case .disconnected: return AppTheme.textDim
         case .failed:       return AppTheme.critical
         }

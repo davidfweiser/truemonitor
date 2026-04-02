@@ -13,7 +13,7 @@ struct ContentView: View {
                 legacyTabView
             }
         }
-        .tint(AppTheme.accent)
+        .tint(AppTheme.cyan)
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
