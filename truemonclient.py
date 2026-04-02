@@ -446,6 +446,38 @@ class TrueMonClientApp:
             if card.get("disk_label"):
                 card["disk_label"].config(font=("Helvetica", _fs(9)))
 
+    # --- live dot animation + status badge ---
+    def _animate_live_dot(self):
+        import math
+        try:
+            if self._live_dot_connected:
+                self._live_dot_phase = (self._live_dot_phase + 0.18) % (2 * math.pi)
+                alpha = 0.4 + 0.6 * (0.5 + 0.5 * math.sin(self._live_dot_phase))
+                r = int(0x06 + (0xaa - 0x06) * alpha)
+                g = int(0x08 + (0xff - 0x08) * alpha)
+                b = int(0x0f + (0x00 - 0x0f) * alpha)
+                color = f"#{r:02x}{g:02x}{b:02x}"
+                self._live_dot.itemconfig(self._live_dot_id, fill=color, outline=color)
+            else:
+                self._live_dot.itemconfig(self._live_dot_id, fill=COLORS["bg"], outline="")
+        except Exception:
+            return  # canvas destroyed (UI rebuild) — stop this loop
+        self.root.after(60, self._animate_live_dot)
+
+    def _set_status(self, text, state):
+        """Update the status badge text, border color, and live dot."""
+        color_map = {
+            "ok": COLORS["lime"],
+            "err": COLORS["critical"],
+            "connecting": COLORS["warning"],
+            "demo": COLORS["warning"],
+            "disconnected": COLORS["text_dim"],
+        }
+        color = color_map.get(state, COLORS["text_dim"])
+        self._live_dot_connected = (state == "ok")
+        self.status_lbl.config(text=f"  {text}  ", fg=color)
+        self._status_badge.config(highlightbackground=color)
+
     # --- ttk styles ---
     def _setup_styles(self):
         s = ttk.Style()
@@ -544,17 +576,44 @@ class TrueMonClientApp:
         # header
         hdr = tk.Frame(main, bg=COLORS["bg"])
         hdr.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(
-            hdr, text="TrueMonClient", bg=COLORS["bg"], fg=COLORS["accent"],
-            font=("Helvetica", self._sf(20), "bold"),
-        ).pack(side=tk.LEFT)
-        tk.Label(
-            hdr, text=f"v{APP_VERSION}", bg=COLORS["bg"], fg=COLORS["text_dim"],
-            font=("Helvetica", self._sf(9)),
-        ).pack(side=tk.LEFT, padx=(6, 0), pady=(6, 0))
-        self.status_lbl = ttk.Label(hdr, text="Disconnected",
-                                    style="Status.TLabel")
-        self.status_lbl.pack(side=tk.RIGHT, padx=10)
+
+        # gradient-style multi-color title
+        title_f = tk.Frame(hdr, bg=COLORS["bg"])
+        title_f.pack(side=tk.LEFT)
+        tk.Label(title_f, text="True", bg=COLORS["bg"], fg=COLORS["accent"],
+                 font=("Courier", self._sf(20), "bold")).pack(side=tk.LEFT)
+        tk.Label(title_f, text="Mon", bg=COLORS["bg"], fg=COLORS["magenta"],
+                 font=("Courier", self._sf(20), "bold")).pack(side=tk.LEFT)
+        tk.Label(title_f, text="Client", bg=COLORS["bg"], fg=COLORS["lime"],
+                 font=("Courier", self._sf(20), "bold")).pack(side=tk.LEFT)
+
+        tk.Label(hdr, text=f"v{APP_VERSION}", bg=COLORS["bg"], fg=COLORS["text_dim"],
+                 font=("Courier", self._sf(9))).pack(side=tk.LEFT, padx=(6, 0), pady=(8, 0))
+
+        # Status badge (pill-style with colored border)
+        self._status_badge = tk.Frame(
+            hdr, bg=COLORS["bg"],
+            highlightbackground=COLORS["text_dim"], highlightthickness=1,
+        )
+        self._status_badge.pack(side=tk.RIGHT, padx=10)
+
+        self._live_dot = tk.Canvas(
+            self._status_badge, bg=COLORS["bg"],
+            width=8, height=8, highlightthickness=0,
+        )
+        self._live_dot.pack(side=tk.LEFT, padx=(8, 0), pady=6)
+        self._live_dot_id = self._live_dot.create_oval(1, 1, 7, 7, fill=COLORS["bg"], outline="")
+
+        self.status_lbl = tk.Label(
+            self._status_badge, text="  Disconnected  ",
+            bg=COLORS["bg"], fg=COLORS["text_dim"],
+            font=("Courier", self._sf(10)),
+        )
+        self.status_lbl.pack(side=tk.LEFT, padx=(2, 8), pady=4)
+
+        self._live_dot_phase = 0.0
+        self._live_dot_connected = False
+        self._animate_live_dot()
 
         # tabs
         self.notebook = ttk.Notebook(main)
@@ -578,6 +637,11 @@ class TrueMonClientApp:
                                fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)))
         self.footer.pack(side=tk.LEFT)
 
+    _CARD_ICONS = {
+        "CPU Usage": "◈",
+        "Memory": "◆",
+    }
+
     def _make_card(self, parent, title, row, col, color=None):
         accent = color or COLORS["accent"]
         f = tk.Frame(
@@ -587,8 +651,16 @@ class TrueMonClientApp:
         )
         f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
 
-        tk.Label(f, text=title, bg=COLORS["card"], fg=accent,
-                 font=("Helvetica", self._sf(12), "bold")).pack(anchor="w")
+        icon = self._CARD_ICONS.get(title, "◈")
+        title_row = tk.Frame(f, bg=COLORS["card"])
+        title_row.pack(fill=tk.X)
+        tk.Label(title_row, text=icon, bg=COLORS["card"], fg=accent,
+                 font=("Courier", self._sf(11))).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(title_row, text=title, bg=COLORS["card"], fg=accent,
+                 font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
+
+        tk.Frame(f, bg=accent, height=1).pack(fill=tk.X, pady=(6, 0))
+
         val = ttk.Label(f, text="--", style="CardValue.TLabel")
         val.pack(anchor="w", pady=(10, 4))
         sub = ttk.Label(f, text="", style="CardSub.TLabel")
@@ -646,6 +718,8 @@ class TrueMonClientApp:
         # Title row
         hdr = tk.Frame(f, bg=COLORS["card"])
         hdr.pack(fill=tk.X)
+        tk.Label(hdr, text="≋", bg=COLORS["card"], fg=COLORS["lime"],
+                 font=("Courier", self._sf(11))).pack(side=tk.LEFT, padx=(0, 6))
         tk.Label(hdr, text="Network", bg=COLORS["card"], fg=COLORS["lime"],
                  font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
 
@@ -660,6 +734,8 @@ class TrueMonClientApp:
                  font=("Helvetica", self._sf(10))).pack(side=tk.LEFT)
         tk.Label(leg, text="Out", fg=COLORS["text_dim"], bg=COLORS["card"],
                  font=("Helvetica", self._sf(9))).pack(side=tk.LEFT)
+
+        tk.Frame(f, bg=COLORS["lime"], height=1).pack(fill=tk.X, pady=(6, 0))
 
         # Current speed labels
         speed_f = tk.Frame(f, bg=COLORS["card"])
@@ -737,8 +813,12 @@ class TrueMonClientApp:
 
         hdr = tk.Frame(f, bg=COLORS["card"])
         hdr.pack(fill=tk.X)
+        tk.Label(hdr, text="△", bg=COLORS["card"], fg=COLORS["orange_accent"],
+                 font=("Courier", self._sf(11))).pack(side=tk.LEFT, padx=(0, 6))
         tk.Label(hdr, text="CPU Temperature", bg=COLORS["card"], fg=COLORS["orange_accent"],
                  font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
+
+        tk.Frame(f, bg=COLORS["orange_accent"], height=1).pack(fill=tk.X, pady=(6, 0))
 
         temp_f = tk.Frame(f, bg=COLORS["card"])
         temp_f.pack(fill=tk.X, pady=(6, 4))
@@ -846,6 +926,8 @@ class TrueMonClientApp:
 
             title_row = tk.Frame(f, bg=COLORS["card"])
             title_row.pack(fill=tk.X)
+            tk.Label(title_row, text="⬡", bg=COLORS["card"], fg=COLORS["purple"],
+                     font=("Courier", self._sf(11))).pack(side=tk.LEFT, padx=(0, 6))
             tk.Label(title_row, text=f"Pool: {name}", bg=COLORS["card"],
                      fg=COLORS["purple"],
                      font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
@@ -858,6 +940,8 @@ class TrueMonClientApp:
                 command=lambda n=name, t=topo: self._show_drive_map(n, t),
             )
             map_btn.pack(side=tk.RIGHT)
+
+            tk.Frame(f, bg=COLORS["purple"], height=1).pack(fill=tk.X, pady=(6, 0))
 
             val_lbl = ttk.Label(f, text="--", style="CardValue.TLabel")
             val_lbl.pack(anchor="w", pady=(8, 2))
@@ -1440,11 +1524,11 @@ class TrueMonClientApp:
         if was_demo:
             self.demo_btn.config(text="Stop Demo", bg=COLORS["critical"])
             self.conn_btn.config(state=tk.DISABLED)
-            self.status_lbl.config(text="Demo Mode", style="StatusOK.TLabel")
+            self._set_status("Demo Mode", "demo")
         elif was_connected:
             self.conn_btn.config(text="Reconnect")
             self.disc_btn.config(state=tk.NORMAL)
-            self.status_lbl.config(text="Connected", style="StatusOK.TLabel")
+            self._set_status("Connected", "ok")
 
         self.notebook.select(2)
 
@@ -1491,8 +1575,7 @@ class TrueMonClientApp:
         host = self.config.get("server_host", "")
         port = self.config.get("server_port", BROADCAST_DEFAULT_PORT)
         key = self.config.get("server_key", BROADCAST_DEFAULT_KEY)
-        self.status_lbl.config(
-            text=f"Connecting to {host}:{port}...", style="Status.TLabel")
+        self._set_status(f"Connecting to {host}:{port}...", "connecting")
         self.conn_btn.config(state=tk.DISABLED)
 
         self.monitor_client = MonitorClient(
@@ -1508,8 +1591,7 @@ class TrueMonClientApp:
         host = self.config.get("server_host", "")
         port = self.config.get("server_port", BROADCAST_DEFAULT_PORT)
         self.connected = True
-        self.status_lbl.config(
-            text=f"Connected to {host}:{port}", style="StatusOK.TLabel")
+        self._set_status(f"Connected to {host}:{port}", "ok")
         self.conn_btn.config(text="Reconnect", state=tk.NORMAL)
         self.disc_btn.config(state=tk.NORMAL)
         self.notebook.select(0)
@@ -1517,16 +1599,14 @@ class TrueMonClientApp:
     def _on_conn_error(self, msg):
         self.footer.config(text=f"Error: {msg}", fg=COLORS["critical"])
         if not self.connected:
-            self.status_lbl.config(text="Retrying...", style="Status.TLabel")
+            self._set_status("Retrying...", "connecting")
 
     def _on_disconnected(self):
         if self.connected:
             self.connected = False
             host = self.config.get("server_host", "")
             port = self.config.get("server_port", BROADCAST_DEFAULT_PORT)
-            self.status_lbl.config(
-                text=f"Lost connection — retrying {host}:{port}...",
-                style="StatusErr.TLabel")
+            self._set_status(f"Lost connection — retrying {host}:{port}...", "err")
             self.footer.config(
                 text=f"Disconnected at {datetime.now().strftime('%H:%M:%S')}",
                 fg=COLORS["warning"])
@@ -1536,7 +1616,7 @@ class TrueMonClientApp:
             self.monitor_client.stop()
             self.monitor_client = None
         self.connected = False
-        self.status_lbl.config(text="Disconnected", style="Status.TLabel")
+        self._set_status("Disconnected", "disconnected")
         self.conn_btn.config(text="Save & Connect", state=tk.NORMAL)
         self.disc_btn.config(state=tk.DISABLED)
         self._reset_cards()
@@ -1713,7 +1793,7 @@ class TrueMonClientApp:
         self.demo_mode = True
         self.poll_thread = threading.Thread(target=self._demo_poll, daemon=True)
         self.demo_btn.config(text="Stop Demo", bg=COLORS["critical"])
-        self.status_lbl.config(text="Demo Mode", style="StatusOK.TLabel")
+        self._set_status("Demo Mode", "demo")
         self.conn_btn.config(state=tk.DISABLED)
         self.notebook.select(0)
         self._demo_cpu = 35.0
@@ -1729,7 +1809,7 @@ class TrueMonClientApp:
             self.poll_thread.join(timeout=3)
         self.demo_btn.config(text="Demo Mode", bg=COLORS["warning"])
         self.conn_btn.config(state=tk.NORMAL)
-        self.status_lbl.config(text="Disconnected", style="Status.TLabel")
+        self._set_status("Disconnected", "disconnected")
         self._reset_cards()
 
     def _demo_poll(self):
