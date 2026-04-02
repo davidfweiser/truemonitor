@@ -925,53 +925,6 @@ a { color: var(--cyan); }
   100% { background-position: 0 60px; }
 }
 
-/* === FLOATING PARTICLES === */
-.particles {
-  position: fixed; inset: 0; z-index: 1; pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  animation: floatParticle linear infinite;
-  opacity: 0;
-}
-
-@keyframes floatParticle {
-  0% { transform: translateY(110vh) translateX(0) scale(0); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translateY(-10vh) translateX(var(--drift)) scale(1); opacity: 0; }
-}
-
-/* === DATA STREAMS === */
-.data-streams {
-  position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden;
-}
-
-.stream-line {
-  position: absolute;
-  width: 2px;
-  height: 100%;
-  overflow: hidden;
-}
-
-.stream-dot {
-  position: absolute;
-  width: 2px;
-  height: 12px;
-  border-radius: 1px;
-  animation: streamFlow linear infinite;
-  opacity: 0;
-}
-
-@keyframes streamFlow {
-  0% { top: -20px; opacity: 0; }
-  5% { opacity: 0.8; }
-  95% { opacity: 0.8; }
-  100% { top: 100%; opacity: 0; }
-}
-
 /* === FLOATING 3D SHAPES === */
 .float-element {
   position: fixed;
@@ -1783,12 +1736,6 @@ a { color: var(--cyan); }
 <div class="bg-layer bg-gradient"></div>
 <div class="bg-layer grid-floor"></div>
 
-<!-- PARTICLES -->
-<div class="particles" id="particles"></div>
-
-<!-- DATA STREAMS -->
-<div class="data-streams" id="dataStreams"></div>
-
 <!-- FLOATING 3D SHAPES -->
 <div class="float-element hex-shape" style="top:10%;left:5%;--fx:40px;--fy:60px;--fx2:-30px;--fy2:-40px;background:var(--cyan);animation-duration:18s;"></div>
 <div class="float-element diamond-shape" style="top:70%;left:85%;--fx:-50px;--fy:-40px;--fx2:30px;--fy2:50px;background:var(--magenta);animation-duration:22s;"></div>
@@ -1992,47 +1939,6 @@ a { color: var(--cyan); }
 </div>
 
 <script>
-// === PARTICLES ===
-(function initParticles() {
-  var container = document.getElementById('particles');
-  var colors = ['var(--cyan)', 'var(--magenta)', 'var(--lime)', 'var(--purple)', 'var(--orange)'];
-  for (var i = 0; i < 30; i++) {
-    var p = document.createElement('div');
-    p.className = 'particle';
-    var size = 2 + Math.random() * 3;
-    p.style.width = size + 'px';
-    p.style.height = size + 'px';
-    p.style.left = (Math.random() * 100) + '%';
-    p.style.background = colors[i % colors.length];
-    p.style.boxShadow = '0 0 ' + (size * 2) + 'px ' + colors[i % colors.length];
-    p.style.animationDuration = (10 + Math.random() * 15) + 's';
-    p.style.animationDelay = (Math.random() * 10) + 's';
-    p.style.setProperty('--drift', (-30 + Math.random() * 60) + 'px');
-    container.appendChild(p);
-  }
-})();
-
-// === DATA STREAMS ===
-(function initStreams() {
-  var container = document.getElementById('dataStreams');
-  var colors = ['var(--cyan)', 'var(--magenta)', 'var(--lime)', 'var(--purple)'];
-  for (var i = 0; i < 8; i++) {
-    var line = document.createElement('div');
-    line.className = 'stream-line';
-    line.style.left = (5 + (i / 8) * 90) + '%';
-    for (var j = 0; j < 4; j++) {
-      var dot = document.createElement('div');
-      dot.className = 'stream-dot';
-      dot.style.background = colors[i % colors.length];
-      dot.style.boxShadow = '0 0 6px ' + colors[i % colors.length];
-      dot.style.animationDuration = (3 + Math.random() * 5) + 's';
-      dot.style.animationDelay = (Math.random() * 6) + 's';
-      line.appendChild(dot);
-    }
-    container.appendChild(line);
-  }
-})();
-
 // === 3D TILT ON MOUSE (monitor tab cards only) ===
 document.addEventListener('mousemove', function(e) {
   if (currentTab !== 'monitor') return;
