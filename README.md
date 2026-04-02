@@ -2,7 +2,7 @@
 
 A real-time monitoring dashboard for TrueNAS systems. Built with Python, TrueMonitor provides a dark-themed interface that displays system metrics, storage pool health, and alerts from your TrueNAS server.
 
-Four companion apps can display the same live data remotely: **TrueMonitor Web** (browser-based dashboard), **TrueMonClient** (Python desktop GUI), **TrueMonitor Text** (headless/SSH curses TUI), and **TrueMonClient iOS** (native iPhone app).
+Four companion apps can display the same live data remotely: **TrueMonitor Web** (browser-based dashboard with cyberpunk neon UI), **TrueMonClient** (Python desktop GUI), **TrueMonitor Text** (headless/SSH curses TUI), and **TrueMonClient iOS** (native iPhone app with neon aesthetic).
 
 ![TrueMonitor Screenshot](Screenshot_TrueMonitor.png)
 
@@ -68,13 +68,17 @@ python3 truemonitor.py
 
 ## TrueMonitor Web
 
-A browser-based version of TrueMonitor with the same features and dark theme, served locally via Flask. No tkinter required — open it in any browser on your network.
+A browser-based version of TrueMonitor served locally via Flask, featuring a cyberpunk neon UI with animated 3D effects. No tkinter required — open it in any browser on your network.
 
 ### Features
 
 - Identical Monitor, Alerts, and Settings tabs to `truemonitor.py`
+- **Cyberpunk neon aesthetic** — animated perspective grid, floating 3D geometric shapes, scanline overlay, and neon glow effects
+- **Neon color palette** — cyan, magenta, lime, orange, purple, and gold with dark deep-space background
+- **3D card tilt** — monitor cards respond to mouse movement with perspective transforms
+- **Typography** — Orbitron (headings), Rajdhani (body), Share Tech Mono (data) for a sci-fi command center feel
+- **HiDPI canvas graphs** — smooth bezier curves with area fills for network I/O and CPU temperature
 - Real-time updates pushed to all connected browser tabs via Server-Sent Events
-- Canvas-based scrolling graphs for network I/O and CPU temperature
 - Drive Map modal for full vdev topology
 - Browser Notification API used for critical, warning, and info alerts (including app update notifications)
 - HTTP on port **8088**, HTTPS on port **8089** (self-signed cert auto-generated)
@@ -83,6 +87,7 @@ A browser-based version of TrueMonitor with the same features and dark theme, se
 - Configurable web address, port, and login credentials in the Settings tab
 - Login page with username/password authentication (default: `client` / `truemonitor`)
 - Brute-force lockout: 5 failed attempts locks the IP for 15 minutes
+- Optimized for Firefox and Safari — no `backdrop-filter` blur, GPU-friendly animations
 
 #### Settings Tab — Web Server Section
 | Setting | Default | Description |
@@ -376,24 +381,27 @@ TrueMonitor passwords and API keys are encrypted at rest using Fernet symmetric 
 
 ## TrueMonClient iOS
 
-A native iPhone app that connects to TrueMonitor's broadcast server and displays the same live monitoring dashboard. Built with SwiftUI for iOS 16+ with full iOS 26 Liquid Glass design support.
+A native iPhone app that connects to TrueMonitor's broadcast server and displays the same live monitoring dashboard. Built with SwiftUI for iOS 16+ with full iOS 26 Liquid Glass design support and a cyberpunk neon aesthetic matching the web dashboard.
 
 ### Features
 
+- **Cyberpunk neon aesthetic** — matching the web dashboard's color palette and visual language
+- **Neon color palette** — card-specific accents: CPU=cyan, Memory=magenta, Network=lime, Temperature=orange, Pools=purple
+- **Monospaced typography** — all metrics, labels, and data use monospaced fonts for a sci-fi command center feel
+- **Neon glow effects** — metric values and status indicators cast colored shadows
 - **Native tab bar** — Standard iOS `TabView` with automatic Liquid Glass chrome on iOS 26; large navigation titles
 - **Monitor tab** — CPU, Memory, Network, Temperature, and ZFS pool cards with live data
-- **Circular gauges** — CPU, Memory, and Pool cards use `Gauge` rings with gradient tints instead of flat progress bars
+- **Circular gauges** — CPU, Memory, and Pool cards use `Gauge` rings with neon gradient tints
 - **Animated metrics** — All numeric values use `.contentTransition(.numericText())` for smooth tick-up/down animations
 - **SF Symbol effects** — Pulsing icons on error disks, variable-color animation on connection status, thermometer icon changes with temperature (iOS 17+)
-- **Network chart** — Area-filled dual-color graph (green = RX, cyan = TX) with 60-point history
+- **Network chart** — Area-filled dual-color graph (lime = RX, cyan = TX) with 60-point history
 - **Temperature chart** — Area-filled line graph with color-coded warning/critical zone overlays and dynamic thermometer icon
-- **Drive Map** — Vdev topology sheet per pool with glass card backgrounds (iOS 26), pulsing error indicators, and capsule error badges
-- **Disk health grid** — Pool cards show a `LazyVGrid` of named drive icons instead of plain dots
-- **Alerts tab** — Severity icons (info/warning/critical) with swipe-to-delete on individual alerts
-- **Settings tab** — Section headers with SF Symbol icons, animated connection status indicator
-- **Mesh gradient background** — Organic multi-point `MeshGradient` on iOS 18+, falling back to linear gradient on earlier versions
-- **Rounded metric font** — `.rounded` font design for a modern dashboard feel
-- **iOS 26 Liquid Glass** — Glass cards and panels using the native `.glassEffect()` API on iOS 26, with graceful fallback on earlier versions
+- **Drive Map** — Vdev topology sheet per pool with neon card backgrounds, pulsing error indicators, and capsule error badges
+- **Disk health grid** — Pool cards show a `LazyVGrid` of named drive icons with neon glow
+- **Alerts tab** — Severity icons (cyan=info, gold=warning, magenta=critical) with swipe-to-delete on individual alerts
+- **Settings tab** — Uppercase tracked section headers with neon accent colors, glowing status dot
+- **Deep-space background** — Dark mesh gradient (#06080f) on iOS 18+, falling back to linear gradient on earlier versions
+- **iOS 26 Liquid Glass** — Glass cards and panels using the native `.glassEffect()` API on iOS 26, with graceful fallback via `NeonCardStyle` on earlier versions
 - **Always-on background monitoring** — Silent audio loop keeps the TCP connection alive while the screen is off; BGProcessingTask fires every 15 minutes as a safety net
 - **TCP keepalive** — Connection probes every 10 seconds so dead connections are detected quickly without waiting for a timeout
 - **Data watchdog** — If no stats arrive for 30 seconds while connected, the app forces a reconnect
@@ -420,7 +428,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 - **TrueNASClient** - WebSocket JSON-RPC 2.0 client: persistent `wss://` connection, API key or password auth, auto-reconnect with exponential backoff on network errors, multi-format reporting fallback, data parsing for CPU, memory, network, temperature, pools, and system alerts
 - **BroadcastServer** - TCP server that encrypts and streams stats to connected TrueMonClient instances after every poll. Requires HMAC auth handshake. Uses exponential backoff instead of IP banning for failed auth.
 - **TrueMonitorApp** *(truemonitor.py)* - tkinter GUI with threaded background polling, thread-safe UI updates via `root.after()`, persistent window size/position across launches, and dynamic card font scaling on window resize
-- **TrueMonitorWebApp** *(truemonitor-web.py)* - Flask web server with Server-Sent Events for real-time browser updates; embeds a full HTML/CSS/JS dashboard; runs HTTP on the configured port and HTTPS on port+1 with an auto-generated self-signed certificate
+- **TrueMonitorWebApp** *(truemonitor-web.py)* - Flask web server with Server-Sent Events for real-time browser updates; embeds a cyberpunk neon HTML/CSS/JS dashboard with 3D animations, floating geometric shapes, and HiDPI canvas graphs; runs HTTP on the configured port and HTTPS on port+1 with an auto-generated self-signed certificate
 
 ### treuemonitor-text.py
 
@@ -444,7 +452,7 @@ Open `TrueMonClient-iOS/TrueMonClient.xcodeproj` in Xcode, select your target de
 - **DataModule** - `@MainActor` singleton managing connection lifecycle, data watchdog, auto-reconnect, 60-point history buffers, alert evaluation, and Keychain passphrase storage
 - **DisplayModule** - UI-only state (selected view, scene lifecycle hooks); sleeps when screen is off while DataModule keeps running
 - **BackgroundAudioService** - Silent audio loop (AVAudioSession `.playback`) that prevents iOS from suspending the app when the screen is off
-- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live area/line graphs; native TabView with Liquid Glass on iOS 26; circular gauges, animated numeric transitions, and SF Symbol effects
+- **Views** - SwiftUI cards (CPU, Memory, Network, Temperature, Pool) using Swift Charts for live area/line graphs; native TabView with Liquid Glass on iOS 26; circular gauges with neon gradients, animated numeric transitions, SF Symbol effects, and cyberpunk neon aesthetic with card-specific accent colors and monospaced typography
 
 ---
 
