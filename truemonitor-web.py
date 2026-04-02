@@ -860,197 +860,956 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TrueMonitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
 :root {
-  --bg: #1a1a2e; --card: #16213e; --card-border: #0f3460;
-  --text: #e0e0e0; --text-dim: #888899; --accent: #4fc3f7;
-  --good: #66bb6a; --warning: #ffa726; --critical: #ef5350;
-  --input-bg: #0f3460; --button: #533483; --button-hover: #6a42a0;
+  --cyan: #00f0ff;
+  --magenta: #ff00aa;
+  --lime: #aaff00;
+  --orange: #ff6600;
+  --purple: #aa44ff;
+  --blue: #3366ff;
+  --pink: #ff44aa;
+  --gold: #ffcc00;
+  --good: #66bb6a;
+  --warning: #ffa726;
+  --critical: #ef5350;
+  --bg-deep: #06080f;
+  --bg-card: rgba(10, 18, 40, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text: #e8eaf6;
+  --text-dim: rgba(200, 210, 240, 0.5);
+  --input-bg: rgba(15, 25, 60, 0.8);
+  --card-border: rgba(0, 240, 255, 0.1);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: Helvetica, Arial, sans-serif;
-       font-size: 14px; min-height: 100vh; }
-a { color: var(--accent); }
 
-/* Header */
-#header { display: flex; align-items: center; padding: 10px 16px 8px;
-          gap: 8px; border-bottom: 1px solid var(--card-border); }
-#header h1 { color: var(--accent); font-size: 20px; font-weight: bold; }
-#header .version { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
-#status-badge { margin-left: auto; padding: 4px 12px; border-radius: 4px;
-                font-size: 12px; background: var(--card); }
-#status-badge.ok { color: var(--good); }
-#status-badge.err { color: var(--critical); }
-#status-badge.connecting { color: var(--warning); }
-#status-badge.demo { color: var(--warning); }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  font-family: 'Rajdhani', sans-serif;
+  color: var(--text);
+  font-size: 14px;
+}
 
-/* Tabs */
-#tab-bar { display: flex; background: var(--card); border-bottom: 1px solid var(--card-border); }
-.tab-btn { padding: 10px 24px; cursor: pointer; border: none; background: none;
-           color: var(--text-dim); font-size: 13px; font-family: inherit; transition: 0.15s; }
-.tab-btn:hover { color: var(--text); background: var(--card-border); }
-.tab-btn.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
-.tab-btn .badge { display: inline-block; background: var(--critical); color: #fff;
-                  border-radius: 10px; padding: 1px 6px; font-size: 10px; margin-left: 4px; }
+a { color: var(--cyan); }
 
-/* Tab panels */
+/* === BACKGROUND LAYERS === */
+.bg-layer {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+}
+
+.bg-gradient {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 80%, rgba(0,240,255,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(255,0,170,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(170,68,255,0.04) 0%, transparent 50%);
+}
+
+.grid-floor {
+  background-image:
+    linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: gridScroll 20s linear infinite;
+  transform: perspective(600px) rotateX(45deg);
+  transform-origin: center 120%;
+  height: 140%; top: -20%;
+}
+
+@keyframes gridScroll {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 60px; }
+}
+
+/* === FLOATING PARTICLES === */
+.particles {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  animation: floatParticle linear infinite;
+  opacity: 0;
+}
+
+@keyframes floatParticle {
+  0% { transform: translateY(110vh) translateX(0) scale(0); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-10vh) translateX(var(--drift)) scale(1); opacity: 0; }
+}
+
+/* === DATA STREAMS === */
+.data-streams {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden;
+}
+
+.stream-line {
+  position: absolute;
+  width: 2px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.stream-dot {
+  position: absolute;
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  animation: streamFlow linear infinite;
+  opacity: 0;
+}
+
+@keyframes streamFlow {
+  0% { top: -20px; opacity: 0; }
+  5% { opacity: 0.8; }
+  95% { opacity: 0.8; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* === FLOATING 3D SHAPES === */
+.float-element {
+  position: fixed;
+  z-index: 2;
+  pointer-events: none;
+  animation: floatElement linear infinite;
+  opacity: 0.06;
+}
+
+@keyframes floatElement {
+  0% { transform: translate3d(0, 0, 0) rotate3d(1, 1, 0, 0deg); }
+  25% { transform: translate3d(var(--fx), var(--fy), 50px) rotate3d(1, 1, 0, 90deg); }
+  50% { transform: translate3d(0, var(--fy2), 100px) rotate3d(1, 1, 0, 180deg); }
+  75% { transform: translate3d(var(--fx2), 0, 50px) rotate3d(1, 1, 0, 270deg); }
+  100% { transform: translate3d(0, 0, 0) rotate3d(1, 1, 0, 360deg); }
+}
+
+.hex-shape {
+  width: 80px; height: 92px;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+.diamond-shape {
+  width: 60px; height: 60px;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.tri-shape {
+  width: 70px; height: 60px;
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
+
+/* === SCANLINES === */
+.scanlines {
+  position: fixed; inset: 0; z-index: 100; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+}
+
+.scan-beam {
+  position: fixed; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,240,255,0.08), transparent);
+  z-index: 101; pointer-events: none;
+  animation: scanBeam 6s linear infinite;
+}
+
+@keyframes scanBeam {
+  0% { top: -2px; }
+  100% { top: 100%; }
+}
+
+/* === HEADER === */
+#header {
+  position: relative; z-index: 10;
+  display: flex; align-items: center; padding: 12px 20px;
+  border-bottom: 1px solid var(--card-border);
+  background: rgba(6, 8, 15, 0.8);
+  backdrop-filter: blur(20px);
+  animation: slideInDown 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes slideInDown {
+  from { transform: translateY(-40px); opacity: 0; }
+}
+
+.logo {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, var(--cyan), var(--magenta), var(--lime));
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 4s ease infinite;
+  filter: drop-shadow(0 0 15px rgba(0,240,255,0.3));
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.header-version {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 10px;
+  margin-top: 4px;
+}
+
+#status-badge {
+  margin-left: auto;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  border: 1px solid var(--glass-border);
+  background: rgba(10, 18, 40, 0.6);
+  transition: all 0.3s ease;
+}
+
+#status-badge.ok { color: var(--lime); border-color: rgba(170,255,0,0.3); box-shadow: 0 0 15px rgba(170,255,0,0.1); }
+#status-badge.err { color: var(--critical); border-color: rgba(239,83,80,0.3); }
+#status-badge.connecting { color: var(--warning); border-color: rgba(255,167,38,0.3); }
+#status-badge.demo { color: var(--gold); border-color: rgba(255,204,0,0.3); }
+
+.live-dot {
+  width: 8px; height: 8px;
+  background: var(--lime);
+  border-radius: 50%;
+  margin-right: 12px;
+  box-shadow: 0 0 10px var(--lime);
+  animation: pulse 1.5s ease-in-out infinite;
+  display: none;
+}
+
+.live-dot.on { display: block; }
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+}
+
+.header-logout {
+  margin-left: 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-decoration: none;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.header-logout:hover { opacity: 1; color: var(--cyan); }
+
+/* === TABS === */
+#tab-bar {
+  position: relative; z-index: 10;
+  display: flex;
+  background: rgba(10, 18, 40, 0.5);
+  border-bottom: 1px solid var(--card-border);
+  backdrop-filter: blur(10px);
+}
+
+.tab-btn {
+  padding: 10px 28px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.tab-btn:hover { color: var(--text); background: rgba(0,240,255,0.03); }
+
+.tab-btn.active {
+  color: var(--cyan);
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  box-shadow: 0 0 10px var(--cyan);
+}
+
+.tab-btn .badge {
+  display: inline-block;
+  background: var(--magenta);
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 9px;
+  margin-left: 6px;
+  font-family: 'Share Tech Mono', monospace;
+  box-shadow: 0 0 8px rgba(255,0,170,0.4);
+}
+
+/* === TAB PANELS === */
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+/* === MONITOR TAB === */
+#tab-monitor {
+  position: relative; z-index: 10;
+  height: calc(100vh - 90px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,240,255,0.2) transparent;
+}
+
+#tab-monitor::-webkit-scrollbar { width: 6px; }
+#tab-monitor::-webkit-scrollbar-track { background: transparent; }
+#tab-monitor::-webkit-scrollbar-thumb { background: rgba(0,240,255,0.2); border-radius: 3px; }
+
 /* Info bar */
-#info-bar { background: var(--card); border: 1px solid var(--card-border);
-            padding: 8px 14px; margin: 8px; border-radius: 4px;
-            font-size: 12px; color: var(--text); }
+#info-bar {
+  margin: 12px 16px 8px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  backdrop-filter: blur(10px);
+  animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+@keyframes cardEnter {
+  from { transform: translateY(20px) scale(0.98); opacity: 0; }
+}
 
 /* Cards grid */
-.cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-              padding: 8px 16px; }
-.card { background: var(--card); border: 1px solid var(--card-border);
-        border-radius: 4px; padding: 16px 18px; }
-.card-title { color: var(--accent); font-size: 13px; font-weight: bold; margin-bottom: 10px; }
-.card-value { font-size: 28px; font-weight: bold; color: var(--text); margin-bottom: 4px; }
-.card-sub { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
-.progress-track { background: var(--input-bg); border-radius: 3px; height: 16px;
-                  overflow: hidden; margin-top: 8px; }
-.progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s, background 0.4s;
-                 background: var(--accent); width: 0%; }
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 8px 16px;
+  perspective: 1200px;
+}
 
-/* Graph card header row */
-.graph-header { display: flex; align-items: center; margin-bottom: 6px; }
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.card::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 14px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent 40%, transparent 60%, rgba(255,255,255,0.04));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.card:hover {
+  box-shadow: 0 15px 40px rgba(0,0,0,0.3), 0 0 30px rgba(0,240,255,0.06);
+}
+
+.card-cpu { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both; }
+.card-mem { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+.card-net { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both; }
+.card-temp { animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both; }
+
+.card-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title .icon {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+
+.card-cpu .card-title { color: var(--cyan); }
+.card-cpu .card-title .icon { background: rgba(0,240,255,0.15); color: var(--cyan); }
+.card-mem .card-title { color: var(--magenta); }
+.card-mem .card-title .icon { background: rgba(255,0,170,0.15); color: var(--magenta); }
+.card-net .card-title { color: var(--lime); }
+.card-net .card-title .icon { background: rgba(170,255,0,0.15); color: var(--lime); }
+.card-temp .card-title { color: var(--orange); }
+.card-temp .card-title .icon { background: rgba(255,102,0,0.15); color: var(--orange); }
+
+.card-value {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 4px;
+  text-shadow: 0 0 20px rgba(0,240,255,0.2);
+}
+
+.card-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.progress-track {
+  background: rgba(0,240,255,0.06);
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1), background 0.4s;
+  background: linear-gradient(90deg, var(--cyan), var(--blue));
+  width: 0%;
+  position: relative;
+  box-shadow: 0 0 12px rgba(0,240,255,0.3);
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 30px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15));
+  animation: barShine 2s ease-in-out infinite;
+}
+
+@keyframes barShine {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+/* Graph card header */
+.graph-header { display: flex; align-items: center; margin-bottom: 8px; }
 .graph-header .card-title { margin-bottom: 0; flex: 1; }
-.legend { display: flex; gap: 10px; font-size: 11px; color: var(--text-dim); }
-.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+.legend { display: flex; gap: 10px; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text-dim); }
+.legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
               margin-right: 3px; vertical-align: middle; }
 
 /* Speed row */
-.speed-row { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
-.speed-rx { font-size: 15px; font-weight: bold; color: var(--good); }
-.speed-tx { font-size: 15px; font-weight: bold; color: var(--accent); }
-.iface-lbl { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.speed-row { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.speed-rx { font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700; color: var(--lime); }
+.speed-tx { font-family: 'Orbitron', sans-serif; font-size: 14px; font-weight: 700; color: var(--cyan); }
+.iface-lbl { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text-dim); margin-left: auto; }
 
 /* Canvases */
-.graph-canvas { width: 100%; height: 120px; background: #0a1628;
-                border-radius: 3px; display: block; }
-.scale-lbl { text-align: right; font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+.graph-canvas { width: 100%; height: 100px; background: rgba(0,240,255,0.02);
+                border-radius: 8px; display: block; }
+.scale-lbl { text-align: right; font-family: 'Share Tech Mono', monospace;
+             font-size: 9px; color: var(--text-dim); margin-top: 4px; }
 
 /* Temp card */
-.temp-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
-.temp-val { font-size: 28px; font-weight: bold; }
-.temp-status { font-size: 13px; }
-.temp-range { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.temp-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.temp-val { font-family: 'Orbitron', sans-serif; font-size: 32px; font-weight: 900; }
+.temp-status { font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+.temp-range { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text-dim); margin-left: auto; }
 
-/* Pool cards */
-#pool-section { padding: 0 16px 16px; }
-.pool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.pool-card { background: var(--card); border: 1px solid var(--card-border);
-             border-radius: 4px; padding: 14px 18px; }
-.pool-title-row { display: flex; align-items: center; margin-bottom: 8px; }
-.pool-name { color: var(--accent); font-size: 13px; font-weight: bold; flex: 1; }
-.map-btn { background: var(--button); color: var(--text); border: none; border-radius: 3px;
-           padding: 3px 10px; font-size: 11px; cursor: pointer; font-family: inherit; }
-.map-btn:hover { background: var(--button-hover); }
+/* === POOL CARDS === */
+#pool-section { padding: 6px 16px 16px; }
+
+.pool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.pool-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(170,68,255,0.12);
+  border-radius: 14px;
+  padding: 16px 18px;
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+.pool-card::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle, rgba(170,68,255,0.04) 0%, transparent 60%);
+  animation: poolGlow 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes poolGlow {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(10%, -10%); }
+  66% { transform: translate(-10%, 10%); }
+}
+
+.pool-card:hover {
+  border-color: rgba(170,68,255,0.25);
+  box-shadow: 0 0 25px rgba(170,68,255,0.08);
+}
+
+.pool-title-row { display: flex; align-items: center; margin-bottom: 10px; }
+
+.pool-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--purple);
+  flex: 1;
+}
+
+.map-btn {
+  background: rgba(170,68,255,0.15);
+  color: var(--purple);
+  border: 1px solid rgba(170,68,255,0.2);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 1px;
+}
+
+.map-btn:hover {
+  background: rgba(170,68,255,0.25);
+  border-color: rgba(170,68,255,0.4);
+  box-shadow: 0 0 15px rgba(170,68,255,0.15);
+}
+
+.pool-card .card-value {
+  font-size: 24px;
+}
+
+.pool-card .card-sub {
+  margin-bottom: 6px;
+}
+
+.pool-card .progress-track {
+  background: rgba(170,68,255,0.06);
+}
+
+.pool-card .progress-fill {
+  background: linear-gradient(90deg, var(--purple), var(--magenta));
+  box-shadow: 0 0 12px rgba(170,68,255,0.3);
+}
+
 .disk-row { display: flex; align-items: center; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
-.disk-lbl { font-size: 11px; color: var(--text-dim); margin-right: 4px; }
-.disk-ind { width: 12px; height: 18px; border-radius: 2px; display: inline-block;
-            cursor: default; position: relative; margin: 0 3px; }
-.disk-ind:hover::after { content: attr(title); position: absolute; bottom: 22px; left: 50%;
-  transform: translateX(-50%); background: #333344; color: var(--text); padding: 2px 6px;
-  border-radius: 3px; font-size: 10px; white-space: nowrap; z-index: 100; pointer-events: none; }
+.disk-lbl { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text-dim); margin-right: 4px; }
+.disk-ind {
+  width: 10px; height: 16px; border-radius: 3px; display: inline-block;
+  cursor: default; position: relative; margin: 0 2px;
+  animation: driveGlow 2s ease-in-out infinite;
+}
 
-/* Alerts tab */
-#alerts-header { display: flex; align-items: center; padding: 10px 16px; gap: 12px; }
-#alerts-header h2 { color: var(--accent); font-size: 15px; }
-#alert-count-lbl { font-size: 12px; color: var(--text-dim); }
-#clear-btn { margin-left: auto; background: var(--card); color: var(--text); border: none;
-             border-radius: 3px; padding: 5px 14px; font-size: 12px; cursor: pointer;
-             font-family: inherit; }
-#clear-btn:hover { background: var(--card-border); }
-#alert-log { background: var(--card); border: 1px solid var(--card-border);
-             border-radius: 4px; margin: 0 16px 16px; padding: 10px;
-             height: calc(100vh - 200px); overflow-y: auto; font-family: monospace;
-             font-size: 12px; line-height: 1.6; }
-.alert-entry { padding: 2px 0; border-bottom: 1px solid #1e2a4a; }
+.disk-ind:hover::after {
+  content: attr(title); position: absolute; bottom: 22px; left: 50%;
+  transform: translateX(-50%); background: rgba(10,18,40,0.95); color: var(--text);
+  padding: 3px 8px; border-radius: 4px; font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; white-space: nowrap; z-index: 100; pointer-events: none;
+  border: 1px solid var(--glass-border);
+}
+
+@keyframes driveGlow {
+  0%, 100% { box-shadow: 0 0 3px currentColor; }
+  50% { box-shadow: 0 0 8px currentColor; }
+}
+
+/* === ALERTS TAB === */
+#tab-alerts {
+  position: relative; z-index: 10;
+  height: calc(100vh - 90px);
+}
+
+#alerts-header {
+  display: flex; align-items: center; padding: 14px 20px; gap: 14px;
+}
+
+#alerts-header h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--pink);
+}
+
+#alert-count-lbl {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+#clear-btn {
+  margin-left: auto;
+  background: rgba(255,68,170,0.1);
+  color: var(--pink);
+  border: 1px solid rgba(255,68,170,0.2);
+  border-radius: 6px;
+  padding: 5px 16px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+
+#clear-btn:hover {
+  background: rgba(255,68,170,0.2);
+  border-color: rgba(255,68,170,0.4);
+}
+
+#alert-log {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  margin: 0 16px 16px;
+  padding: 12px;
+  height: calc(100vh - 200px);
+  overflow-y: auto;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  backdrop-filter: blur(20px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,68,170,0.2) transparent;
+}
+
+.alert-entry { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
 .alert-ts { color: var(--text-dim); }
-.alert-critical { color: var(--critical); }
+.alert-critical { color: var(--critical); text-shadow: 0 0 8px rgba(239,83,80,0.3); }
 .alert-warning { color: var(--warning); }
-.alert-info { color: var(--accent); }
-.alert-resolved { color: var(--good); }
+.alert-info { color: var(--cyan); }
+.alert-resolved { color: var(--lime); }
 
-/* Settings tab */
-#settings-panel { padding: 20px 28px; max-width: 600px; }
-.settings-section { color: var(--accent); font-size: 15px; font-weight: bold;
-                    margin: 0 0 16px; }
-.settings-divider { color: var(--text-dim); font-size: 11px; margin: 16px 0 14px;
-                    text-align: center; border-top: 1px solid var(--card-border); padding-top: 10px; }
-.settings-row { display: grid; grid-template-columns: 200px 1fr; gap: 10px;
-                align-items: center; margin-bottom: 10px; }
-.settings-label { color: var(--text); font-size: 13px; }
-.settings-input { background: var(--input-bg); color: var(--text); border: none;
-                  border-radius: 3px; padding: 7px 10px; font-size: 13px;
-                  font-family: inherit; width: 100%; }
-.settings-input:focus { outline: 1px solid var(--accent); }
-.settings-select { background: var(--input-bg); color: var(--text); border: none;
-                   border-radius: 3px; padding: 7px 10px; font-size: 13px;
-                   font-family: inherit; width: 130px; }
-.settings-note { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-#broadcast-status { font-size: 11px; color: var(--text-dim); margin: 4px 0 10px 200px; }
-.btn-row { display: flex; gap: 14px; margin-top: 24px; }
-.btn-primary { background: #fff; color: #000; border: none; border-radius: 3px;
-               padding: 9px 22px; font-size: 13px; font-weight: bold; cursor: pointer;
-               font-family: inherit; }
-.btn-primary:hover { background: #e0e0e0; }
-.btn-primary:disabled { opacity: 0.4; cursor: default; }
-.btn-secondary { background: #fff; color: #000; border: none; border-radius: 3px;
-                 padding: 9px 22px; font-size: 13px; cursor: pointer; font-family: inherit; }
-.btn-secondary:hover { background: #e0e0e0; }
-.btn-secondary:disabled { opacity: 0.4; cursor: default; }
-.btn-demo { background: var(--warning); color: #1a1a2e; border: none; border-radius: 3px;
-            padding: 9px 22px; font-size: 13px; font-weight: bold; cursor: pointer;
-            font-family: inherit; }
-.btn-demo:hover { background: #ffb74d; }
-.key-row { display: flex; gap: 6px; align-items: center; }
-.key-show-btn { background: var(--card); color: var(--text); border: none; border-radius: 3px;
-                padding: 6px 10px; font-size: 11px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+/* === SETTINGS TAB === */
+#tab-settings {
+  position: relative; z-index: 10;
+  height: calc(100vh - 90px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,240,255,0.2) transparent;
+}
 
-/* Footer */
-#footer { padding: 6px 16px; font-size: 11px; color: var(--text-dim);
-          border-top: 1px solid var(--card-border); }
+#settings-panel {
+  padding: 24px 32px;
+  max-width: 650px;
+}
 
-/* Drive map modal */
-#modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-                 z-index: 1000; justify-content: center; align-items: flex-start;
-                 padding-top: 40px; }
+.settings-section {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  margin: 0 0 18px;
+}
+
+.settings-divider {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 20px 0 16px;
+  text-align: center;
+  border-top: 1px solid var(--card-border);
+  padding-top: 12px;
+  letter-spacing: 2px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.settings-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.settings-input {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: rgba(0,240,255,0.3);
+  box-shadow: 0 0 15px rgba(0,240,255,0.08);
+}
+
+.settings-select {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  width: 130px;
+}
+
+.settings-note {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+#broadcast-status {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 4px 0 10px 200px;
+}
+
+.btn-row { display: flex; gap: 14px; margin-top: 28px; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 0 20px rgba(0,240,255,0.2);
+}
+
+.btn-primary:hover { box-shadow: 0 0 30px rgba(0,240,255,0.4); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.3; cursor: default; transform: none; box-shadow: none; }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover { background: rgba(255,255,255,0.12); }
+.btn-secondary:disabled { opacity: 0.3; cursor: default; }
+
+.btn-demo {
+  background: linear-gradient(135deg, var(--orange), var(--gold));
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-demo:hover { box-shadow: 0 0 20px rgba(255,102,0,0.3); }
+
+.key-row { display: flex; gap: 8px; align-items: center; }
+
+.key-show-btn {
+  background: rgba(0,240,255,0.08);
+  color: var(--cyan);
+  border: 1px solid rgba(0,240,255,0.15);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.key-show-btn:hover { background: rgba(0,240,255,0.15); }
+
+/* === FOOTER === */
+#footer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  z-index: 10;
+  padding: 6px 20px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: rgba(6,8,15,0.8);
+  border-top: 1px solid var(--card-border);
+  backdrop-filter: blur(10px);
+}
+
+/* === DRIVE MAP MODAL === */
+#modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(6,8,15,0.85);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 60px;
+}
+
 #modal-overlay.open { display: flex; }
-#modal-box { background: var(--bg); border: 1px solid var(--card-border); border-radius: 6px;
-             width: min(680px, 95vw); max-height: 80vh; overflow-y: auto; padding: 20px; }
-#modal-title { color: var(--accent); font-size: 17px; font-weight: bold; margin-bottom: 16px; }
-.vdev-group-label { color: var(--accent); font-size: 13px; font-weight: bold;
-                    margin: 12px 0 6px; }
-.vdev-box { background: var(--card); border: 1px solid var(--card-border); border-radius: 4px;
-            padding: 10px 12px; margin-bottom: 8px; }
-.vdev-hdr { display: flex; align-items: center; margin-bottom: 8px; }
-.vdev-type { font-size: 12px; font-weight: bold; color: var(--accent); flex: 1; }
-.vdev-status { font-size: 11px; }
+
+#modal-box {
+  background: rgba(10, 18, 40, 0.95);
+  border: 1px solid rgba(0,240,255,0.15);
+  border-radius: 16px;
+  width: min(700px, 95vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 40px rgba(0,240,255,0.05);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(170,68,255,0.3) transparent;
+}
+
+#modal-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--purple);
+  margin-bottom: 18px;
+}
+
+.vdev-group-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  margin: 14px 0 8px;
+}
+
+.vdev-box {
+  background: rgba(170,68,255,0.04);
+  border: 1px solid rgba(170,68,255,0.1);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.vdev-hdr { display: flex; align-items: center; margin-bottom: 10px; }
+.vdev-type { font-family: 'Share Tech Mono', monospace; font-size: 12px; font-weight: bold; color: var(--cyan); flex: 1; }
+.vdev-status { font-family: 'Share Tech Mono', monospace; font-size: 11px; }
 .disk-cards { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.disk-card { border-radius: 3px; padding: 5px 10px; text-align: center; min-width: 70px; }
-.disk-card-name { font-size: 11px; font-weight: bold; }
-.disk-card-status { font-size: 10px; margin-top: 2px; }
-.disk-connector { font-size: 14px; color: var(--card-border); }
-#modal-close { background: var(--button); color: var(--text); border: none; border-radius: 3px;
-               padding: 8px 20px; font-size: 13px; cursor: pointer; margin-top: 16px;
-               font-family: inherit; }
-#modal-close:hover { background: var(--button-hover); }
+.disk-card { border-radius: 6px; padding: 6px 12px; text-align: center; min-width: 70px; }
+.disk-card-name { font-family: 'Share Tech Mono', monospace; font-size: 11px; font-weight: bold; }
+.disk-card-status { font-family: 'Share Tech Mono', monospace; font-size: 10px; margin-top: 2px; }
+.disk-connector { font-size: 14px; color: var(--text-dim); }
+
+#modal-close {
+  background: rgba(170,68,255,0.15);
+  color: var(--purple);
+  border: 1px solid rgba(170,68,255,0.2);
+  border-radius: 8px;
+  padding: 9px 22px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin-top: 18px;
+  transition: all 0.2s;
+}
+
+#modal-close:hover {
+  background: rgba(170,68,255,0.25);
+  box-shadow: 0 0 15px rgba(170,68,255,0.15);
+}
+
+#settings-msg {
+  font-family: 'Share Tech Mono', monospace;
+}
 </style>
 </head>
 <body>
 
+<!-- BACKGROUND LAYERS -->
+<div class="bg-layer bg-gradient"></div>
+<div class="bg-layer grid-floor"></div>
+
+<!-- PARTICLES -->
+<div class="particles" id="particles"></div>
+
+<!-- DATA STREAMS -->
+<div class="data-streams" id="dataStreams"></div>
+
+<!-- FLOATING 3D SHAPES -->
+<div class="float-element hex-shape" style="top:10%;left:5%;--fx:40px;--fy:60px;--fx2:-30px;--fy2:-40px;background:var(--cyan);animation-duration:18s;"></div>
+<div class="float-element diamond-shape" style="top:70%;left:85%;--fx:-50px;--fy:-40px;--fx2:30px;--fy2:50px;background:var(--magenta);animation-duration:22s;"></div>
+<div class="float-element tri-shape" style="top:30%;left:90%;--fx:-30px;--fy:50px;--fx2:40px;--fy2:-30px;background:var(--lime);animation-duration:15s;"></div>
+<div class="float-element hex-shape" style="top:80%;left:15%;--fx:50px;--fy:-30px;--fx2:-40px;--fy2:40px;background:var(--purple);animation-duration:20s;width:50px;height:58px;"></div>
+<div class="float-element diamond-shape" style="top:5%;left:60%;--fx:-20px;--fy:40px;--fx2:30px;--fy2:-20px;background:var(--orange);animation-duration:25s;width:40px;height:40px;"></div>
+
+<!-- SCANLINES -->
+<div class="scanlines"></div>
+<div class="scan-beam"></div>
+
+<!-- HEADER -->
 <div id="header">
-  <h1>TrueMonitor</h1>
-  <span class="version">v{{VERSION}}</span>
+  <span class="logo">TRUEMONITOR</span>
+  <span class="header-version">v{{VERSION}}</span>
+  <div class="live-dot" id="live-dot"></div>
   <span id="status-badge">Disconnected</span>
-  <a href="/logout" style="margin-left:12px;font-size:12px;color:var(--text-dim);text-decoration:none" title="Sign out">Logout</a>
+  <a href="/logout" class="header-logout" title="Sign out">LOGOUT</a>
 </div>
 
+<!-- TABS -->
 <div id="tab-bar">
   <button class="tab-btn active" onclick="showTab('monitor')">Monitor</button>
   <button class="tab-btn" id="alerts-tab-btn" onclick="showTab('alerts')">
@@ -1064,26 +1823,26 @@ a { color: var(--accent); }
   <div id="info-bar">Connect to TrueNAS to begin monitoring</div>
   <div class="cards-grid">
     <!-- CPU -->
-    <div class="card">
-      <div class="card-title">CPU Usage</div>
+    <div class="card card-cpu">
+      <div class="card-title"><div class="icon">&#9889;</div> PROCESSOR</div>
       <div class="card-value" id="cpu-val">--</div>
       <div class="card-sub" id="cpu-sub"></div>
       <div class="progress-track"><div class="progress-fill" id="cpu-bar"></div></div>
     </div>
     <!-- Memory -->
-    <div class="card">
-      <div class="card-title">Memory</div>
+    <div class="card card-mem">
+      <div class="card-title"><div class="icon">&#9670;</div> MEMORY</div>
       <div class="card-value" id="mem-val">--</div>
       <div class="card-sub" id="mem-sub"></div>
       <div class="progress-track"><div class="progress-fill" id="mem-bar"></div></div>
     </div>
     <!-- Network -->
-    <div class="card">
+    <div class="card card-net">
       <div class="graph-header">
-        <div class="card-title">Network</div>
+        <div class="card-title"><div class="icon">&#9673;</div> NETWORK</div>
         <div class="legend">
-          <span><span class="legend-dot" style="background:var(--good)"></span>In</span>
-          <span><span class="legend-dot" style="background:var(--accent)"></span>Out</span>
+          <span><span class="legend-dot" style="background:var(--lime)"></span>In</span>
+          <span><span class="legend-dot" style="background:var(--cyan)"></span>Out</span>
         </div>
       </div>
       <div class="speed-row">
@@ -1095,8 +1854,10 @@ a { color: var(--accent); }
       <div class="scale-lbl" id="net-scale"></div>
     </div>
     <!-- Temperature -->
-    <div class="card">
-      <div class="graph-header"><div class="card-title">CPU Temperature</div></div>
+    <div class="card card-temp">
+      <div class="graph-header">
+        <div class="card-title"><div class="icon">&#9832;</div> CPU TEMP</div>
+      </div>
       <div class="temp-row">
         <span class="temp-val" id="temp-val">--</span>
         <span class="temp-status" id="temp-status"></span>
@@ -1112,9 +1873,9 @@ a { color: var(--accent); }
 <!-- ALERTS TAB -->
 <div id="tab-alerts" class="tab-panel">
   <div id="alerts-header">
-    <h2>Alert Log</h2>
+    <h2>ALERT LOG</h2>
     <span id="alert-count-lbl">0 alerts</span>
-    <button id="clear-btn" onclick="clearAlerts()">Clear All</button>
+    <button id="clear-btn" onclick="clearAlerts()">CLEAR ALL</button>
   </div>
   <div id="alert-log"></div>
 </div>
@@ -1122,7 +1883,7 @@ a { color: var(--accent); }
 <!-- SETTINGS TAB -->
 <div id="tab-settings" class="tab-panel">
   <div id="settings-panel">
-    <div class="settings-section">Connection Settings</div>
+    <div class="settings-section">CONNECTION</div>
     <div class="settings-row">
       <label class="settings-label">IP Address / Hostname:</label>
       <input class="settings-input" id="s-host" type="text" placeholder="192.168.1.100">
@@ -1131,7 +1892,7 @@ a { color: var(--accent); }
       <label class="settings-label">API Key:</label>
       <div class="key-row">
         <input class="settings-input" id="s-apikey" type="password" placeholder="API key">
-        <button class="key-show-btn" onclick="toggleShow('s-apikey',this)">Show</button>
+        <button class="key-show-btn" onclick="toggleShow('s-apikey',this)">SHOW</button>
       </div>
     </div>
     <div class="settings-divider">--- or use credentials ---</div>
@@ -1143,7 +1904,7 @@ a { color: var(--accent); }
       <label class="settings-label">Password:</label>
       <div class="key-row">
         <input class="settings-input" id="s-pass" type="password">
-        <button class="key-show-btn" onclick="toggleShow('s-pass',this)">Show</button>
+        <button class="key-show-btn" onclick="toggleShow('s-pass',this)">SHOW</button>
       </div>
     </div>
     <div class="settings-row">
@@ -1160,7 +1921,7 @@ a { color: var(--accent); }
     <div class="settings-divider">--- broadcast to clients ---</div>
     <div class="settings-row">
       <label class="settings-label">Enable Broadcast:</label>
-      <input type="checkbox" id="s-bcast-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
+      <input type="checkbox" id="s-bcast-enabled" style="width:16px;height:16px;accent-color:var(--cyan)">
     </div>
     <div class="settings-row">
       <label class="settings-label">Broadcast Port:</label>
@@ -1170,7 +1931,7 @@ a { color: var(--accent); }
       <label class="settings-label">Shared Key:</label>
       <div class="key-row">
         <input class="settings-input" id="s-bcast-key" type="password">
-        <button class="key-show-btn" onclick="toggleShow('s-bcast-key',this)">Show</button>
+        <button class="key-show-btn" onclick="toggleShow('s-bcast-key',this)">SHOW</button>
       </div>
     </div>
     <div id="broadcast-status"></div>
@@ -1187,7 +1948,7 @@ a { color: var(--accent); }
     </div>
     <div class="settings-row">
       <label class="settings-label">HTTPS Port:</label>
-      <input class="settings-input" id="s-https-port" type="text" readonly style="width:100px;opacity:0.6">
+      <input class="settings-input" id="s-https-port" type="text" readonly style="width:100px;opacity:0.5">
     </div>
     <div class="settings-note" style="margin-left:200px;margin-bottom:6px">
       Address/port changes take effect after restart.
@@ -1202,7 +1963,7 @@ a { color: var(--accent); }
       <label class="settings-label">New Password:</label>
       <div class="key-row">
         <input class="settings-input" id="s-web-pass" type="password" placeholder="leave blank to keep current">
-        <button class="key-show-btn" onclick="toggleShow('s-web-pass',this)">Show</button>
+        <button class="key-show-btn" onclick="toggleShow('s-web-pass',this)">SHOW</button>
       </div>
     </div>
     <div class="settings-row">
@@ -1211,11 +1972,11 @@ a { color: var(--accent); }
     </div>
 
     <div class="btn-row">
-      <button class="btn-primary" id="save-btn" onclick="saveSettings()">Save &amp; Connect</button>
-      <button class="btn-secondary" id="disc-btn" onclick="disconnectNow()" disabled>Disconnect</button>
-      <button class="btn-demo" id="demo-btn" onclick="toggleDemo()">Demo Mode</button>
+      <button class="btn-primary" id="save-btn" onclick="saveSettings()">SAVE &amp; CONNECT</button>
+      <button class="btn-secondary" id="disc-btn" onclick="disconnectNow()" disabled>DISCONNECT</button>
+      <button class="btn-demo" id="demo-btn" onclick="toggleDemo()">DEMO MODE</button>
     </div>
-    <div id="settings-msg" style="margin-top:12px;font-size:12px;color:var(--text-dim)"></div>
+    <div id="settings-msg" style="margin-top:14px;font-size:12px;color:var(--text-dim)"></div>
   </div>
 </div>
 
@@ -1226,40 +1987,102 @@ a { color: var(--accent); }
   <div id="modal-box">
     <div id="modal-title"></div>
     <div id="modal-content"></div>
-    <button id="modal-close" onclick="closeModalBtn()">Close</button>
+    <button id="modal-close" onclick="closeModalBtn()">CLOSE</button>
   </div>
 </div>
 
 <script>
-const HISTORY_LEN = 60;
-let netRxHist = [], netTxHist = [], tempHist = [];
-let alertCount = 0, unreadAlerts = 0;
-let currentTab = 'monitor';
-let demoActive = false;
-let connected = false;
+// === PARTICLES ===
+(function initParticles() {
+  var container = document.getElementById('particles');
+  var colors = ['var(--cyan)', 'var(--magenta)', 'var(--lime)', 'var(--purple)', 'var(--orange)'];
+  for (var i = 0; i < 30; i++) {
+    var p = document.createElement('div');
+    p.className = 'particle';
+    var size = 2 + Math.random() * 3;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = (Math.random() * 100) + '%';
+    p.style.background = colors[i % colors.length];
+    p.style.boxShadow = '0 0 ' + (size * 2) + 'px ' + colors[i % colors.length];
+    p.style.animationDuration = (10 + Math.random() * 15) + 's';
+    p.style.animationDelay = (Math.random() * 10) + 's';
+    p.style.setProperty('--drift', (-30 + Math.random() * 60) + 'px');
+    container.appendChild(p);
+  }
+})();
+
+// === DATA STREAMS ===
+(function initStreams() {
+  var container = document.getElementById('dataStreams');
+  var colors = ['var(--cyan)', 'var(--magenta)', 'var(--lime)', 'var(--purple)'];
+  for (var i = 0; i < 8; i++) {
+    var line = document.createElement('div');
+    line.className = 'stream-line';
+    line.style.left = (5 + (i / 8) * 90) + '%';
+    for (var j = 0; j < 4; j++) {
+      var dot = document.createElement('div');
+      dot.className = 'stream-dot';
+      dot.style.background = colors[i % colors.length];
+      dot.style.boxShadow = '0 0 6px ' + colors[i % colors.length];
+      dot.style.animationDuration = (3 + Math.random() * 5) + 's';
+      dot.style.animationDelay = (Math.random() * 6) + 's';
+      line.appendChild(dot);
+    }
+    container.appendChild(line);
+  }
+})();
+
+// === 3D TILT ON MOUSE (monitor tab cards only) ===
+document.addEventListener('mousemove', function(e) {
+  if (currentTab !== 'monitor') return;
+  var cards = document.querySelectorAll('.cards-grid .card, .pool-card');
+  var cx = window.innerWidth / 2;
+  var cy = window.innerHeight / 2;
+  var rotY = ((e.clientX - cx) / cx) * 2;
+  var rotX = ((e.clientY - cy) / cy) * -2;
+  cards.forEach(function(card) {
+    var rect = card.getBoundingClientRect();
+    var cardCX = rect.left + rect.width / 2;
+    var cardCY = rect.top + rect.height / 2;
+    var dist = Math.hypot(e.clientX - cardCX, e.clientY - cardCY);
+    var intensity = Math.max(0, 1 - dist / 600);
+    card.style.transform = 'perspective(800px) rotateX(' + (rotX * intensity) +
+      'deg) rotateY(' + (rotY * intensity) + 'deg) translateZ(' + (intensity * 8) + 'px)';
+  });
+});
+
+// === CORE APP LOGIC ===
+var HISTORY_LEN = 60;
+var netRxHist = [], netTxHist = [], tempHist = [];
+var alertCount = 0, unreadAlerts = 0;
+var currentTab = 'monitor';
+var demoActive = false;
+var connected = false;
 
 // --- SSE ---
-let sseSource = null;
+var sseSource = null;
 function connectSSE() {
   if (sseSource) { try { sseSource.close(); } catch(e){} }
   sseSource = new EventSource('/events');
-  sseSource.addEventListener('stats', e => { const d = JSON.parse(e.data); handleStats(d); });
-  sseSource.addEventListener('alert', e => { const d = JSON.parse(e.data); appendAlert(d); });
-  sseSource.addEventListener('clear_alerts', () => { clearAlertsUI(); });
-  sseSource.addEventListener('status', e => { const d = JSON.parse(e.data); setStatus(d.text, d.state); });
-  sseSource.addEventListener('broadcast_status', e => {
-    const d = JSON.parse(e.data);
+  sseSource.addEventListener('stats', function(e) { var d = JSON.parse(e.data); handleStats(d); });
+  sseSource.addEventListener('alert', function(e) { var d = JSON.parse(e.data); appendAlert(d); });
+  sseSource.addEventListener('clear_alerts', function() { clearAlertsUI(); });
+  sseSource.addEventListener('status', function(e) { var d = JSON.parse(e.data); setStatus(d.text, d.state); });
+  sseSource.addEventListener('broadcast_status', function(e) {
+    var d = JSON.parse(e.data);
     document.getElementById('broadcast-status').textContent = d.text;
   });
-  sseSource.onerror = () => { setStatus('Reconnecting\u2026', 'connecting'); setTimeout(connectSSE, 3000); };
+  sseSource.onerror = function() { setStatus('Reconnecting\u2026', 'connecting'); setTimeout(connectSSE, 3000); };
 }
 
 // --- Status badge ---
 function setStatus(text, state) {
-  const el = document.getElementById('status-badge');
+  var el = document.getElementById('status-badge');
   el.textContent = text;
   el.className = state || '';
   connected = (state === 'ok');
+  document.getElementById('live-dot').className = 'live-dot' + (connected ? ' on' : '');
   document.getElementById('disc-btn').disabled = !connected;
   document.getElementById('save-btn').disabled = demoActive;
 }
@@ -1267,17 +2090,23 @@ function setStatus(text, state) {
 // --- Tab switching ---
 function showTab(name) {
   currentTab = name;
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
   document.getElementById('tab-' + name).classList.add('active');
-  document.querySelector(`[onclick="showTab('${name}')"]`).classList.add('active');
+  document.querySelector('[onclick="showTab(\'' + name + '\')"]').classList.add('active');
   if (name === 'alerts') { unreadAlerts = 0; updateAlertBadge(); }
   if (name === 'settings') { loadSettingsForm(); }
+  // Reset 3D transforms when leaving monitor
+  if (name !== 'monitor') {
+    document.querySelectorAll('.cards-grid .card, .pool-card').forEach(function(c) {
+      c.style.transform = '';
+    });
+  }
 }
 
 // --- Alert badge ---
 function updateAlertBadge() {
-  const badge = document.getElementById('alert-badge');
+  var badge = document.getElementById('alert-badge');
   if (unreadAlerts > 0 && currentTab !== 'alerts') {
     badge.textContent = unreadAlerts; badge.style.display = '';
   } else { badge.style.display = 'none'; }
@@ -1295,36 +2124,48 @@ function handleStats(s) {
 }
 
 function updateInfoBar(s) {
-  const la = (s.loadavg || []).map(v => v.toFixed(2)).join(', ');
+  var la = (s.loadavg || []).map(function(v) { return v.toFixed(2); }).join(', ');
   document.getElementById('info-bar').textContent =
-    `${s.hostname||'N/A'}  |  ${s.version||'N/A'}  |  Uptime: ${s.uptime||'N/A'}  |  Load: ${la||'N/A'}`;
+    (s.hostname||'N/A') + '  \u2502  ' + (s.version||'N/A') +
+    '  \u2502  Uptime: ' + (s.uptime||'N/A') + '  \u2502  Load: ' + (la||'N/A');
 }
 
 function colorFor(pct, t1, t2) {
   return pct < t1 ? 'var(--good)' : pct < t2 ? 'var(--warning)' : 'var(--critical)';
 }
 
+function neonColorFor(pct, t1, t2) {
+  return pct < t1 ? 'var(--cyan)' : pct < t2 ? 'var(--gold)' : 'var(--magenta)';
+}
+
 function updateCpu(cpu, la) {
-  const v = document.getElementById('cpu-val');
-  const b = document.getElementById('cpu-bar');
-  const s = document.getElementById('cpu-sub');
+  var v = document.getElementById('cpu-val');
+  var b = document.getElementById('cpu-bar');
+  var s = document.getElementById('cpu-sub');
   if (cpu != null) {
-    const c = colorFor(cpu, 70, 90);
-    v.textContent = cpu + '%'; v.style.color = c;
-    b.style.width = cpu + '%'; b.style.background = c;
-    const la_s = (la||[]).map(x=>x.toFixed(2)).join(', ');
+    var c = colorFor(cpu, 70, 90);
+    var nc = neonColorFor(cpu, 70, 90);
+    v.textContent = cpu + '%'; v.style.color = nc;
+    v.style.textShadow = '0 0 20px ' + nc;
+    b.style.width = cpu + '%';
+    b.style.background = 'linear-gradient(90deg, ' + nc + ', var(--blue))';
+    b.style.boxShadow = '0 0 12px ' + nc;
+    var la_s = (la||[]).map(function(x) { return x.toFixed(2); }).join(', ');
     s.textContent = 'Load avg: ' + la_s;
   } else { v.textContent = 'N/A'; v.style.color = 'var(--text-dim)'; }
 }
 
 function updateMem(mu, mt, mp) {
-  const v = document.getElementById('mem-val');
-  const b = document.getElementById('mem-bar');
-  const s = document.getElementById('mem-sub');
+  var v = document.getElementById('mem-val');
+  var b = document.getElementById('mem-bar');
+  var s = document.getElementById('mem-sub');
   if (mp != null) {
-    const c = colorFor(mp, 70, 90);
-    v.textContent = mp + '%'; v.style.color = c;
-    b.style.width = mp + '%'; b.style.background = c;
+    var nc = neonColorFor(mp, 70, 90);
+    v.textContent = mp + '%'; v.style.color = nc;
+    v.style.textShadow = '0 0 20px ' + nc;
+    b.style.width = mp + '%';
+    b.style.background = 'linear-gradient(90deg, var(--magenta), var(--purple))';
+    b.style.boxShadow = '0 0 12px var(--magenta)';
     s.textContent = formatBytes(mu) + ' / ' + formatBytes(mt);
   } else {
     v.textContent = 'N/A'; v.style.color = 'var(--text-dim)';
@@ -1346,17 +2187,18 @@ function updateNet(rx, tx, iface, rxHist, txHist) {
 function updateTemp(temp, tHist) {
   if (tHist) tempHist = tHist;
   else if (temp != null) { tempHist.push(temp); if (tempHist.length > HISTORY_LEN) tempHist.shift(); }
-  const v = document.getElementById('temp-val');
-  const st = document.getElementById('temp-status');
-  const rng = document.getElementById('temp-range');
+  var v = document.getElementById('temp-val');
+  var st = document.getElementById('temp-status');
+  var rng = document.getElementById('temp-range');
   if (temp != null) {
-    const c = colorFor(temp, 60, 80);
-    const lbl = temp < 60 ? 'Normal' : temp < 80 ? 'Warm' : 'Hot!';
+    var c = colorFor(temp, 60, 80);
+    var lbl = temp < 60 ? 'Normal' : temp < 80 ? 'Warm' : 'Hot!';
     v.textContent = temp + '\u00b0C'; v.style.color = c;
+    v.style.textShadow = '0 0 15px ' + c;
     st.textContent = lbl; st.style.color = c;
     if (tempHist.length > 0) {
-      const lo = Math.min(...tempHist), hi = Math.max(...tempHist);
-      rng.textContent = `Low: ${lo.toFixed(0)}\u00b0C  High: ${hi.toFixed(0)}\u00b0C`;
+      var lo = Math.min.apply(null, tempHist), hi = Math.max.apply(null, tempHist);
+      rng.textContent = 'Low: ' + lo.toFixed(0) + '\u00b0C  High: ' + hi.toFixed(0) + '\u00b0C';
     }
     drawTempGraph();
   } else { v.textContent = 'N/A'; v.style.color = 'var(--text-dim)'; st.textContent = ''; }
@@ -1364,88 +2206,139 @@ function updateTemp(temp, tHist) {
 
 // --- Canvas graphs ---
 function drawNetGraph() {
-  const canvas = document.getElementById('net-canvas');
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  const all = netRxHist.concat(netTxHist);
-  let maxVal = Math.max(...all, 1);
-  const n = HISTORY_LEN, graphH = h - 2;
+  var canvas = document.getElementById('net-canvas');
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * devicePixelRatio; canvas.height = h * devicePixelRatio;
+  var ctx = canvas.getContext('2d');
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  var all = netRxHist.concat(netTxHist);
+  var maxVal = Math.max.apply(null, all.concat([1]));
+  var n = HISTORY_LEN, graphH = h - 2;
 
-  ctx.strokeStyle = '#1a2a4a'; ctx.setLineDash([2,4]);
-  for (let i=1;i<4;i++) {
-    const y = Math.floor(graphH*i/4);
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+  // Grid lines
+  ctx.strokeStyle = 'rgba(0,240,255,0.06)'; ctx.setLineDash([2,6]);
+  for (var i=1;i<4;i++) {
+    var gy = Math.floor(graphH*i/4);
+    ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(w,gy); ctx.stroke();
   }
   ctx.setLineDash([]);
 
-  function drawLine(data, color) {
+  function drawArea(data, strokeColor, fillColor) {
     if (data.length < 2) return;
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-    data.forEach((v,i) => {
-      const x = n>1 ? w*i/(n-1) : 0;
-      let y = graphH - (v/maxVal)*(graphH-4) - 2;
-      y = Math.max(2, Math.min(graphH-2, y));
-      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    ctx.beginPath(); ctx.moveTo(0, h);
+    data.forEach(function(v, i) {
+      var x = n > 1 ? w * i / (n - 1) : 0;
+      var y = graphH - (v / maxVal) * (graphH - 4) - 2;
+      y = Math.max(2, Math.min(graphH - 2, y));
+      if (i === 0) ctx.lineTo(x, y);
+      else {
+        var px = n > 1 ? w * (i - 1) / (n - 1) : 0;
+        var cpx = (px + x) / 2;
+        ctx.bezierCurveTo(cpx, graphH - (data[i-1] / maxVal) * (graphH - 4) - 2, cpx, y, x, y);
+      }
     });
-    ctx.stroke();
+    ctx.lineTo(w, h); ctx.closePath();
+    ctx.fillStyle = fillColor; ctx.fill();
+    // Stroke
+    ctx.beginPath();
+    data.forEach(function(v, i) {
+      var x = n > 1 ? w * i / (n - 1) : 0;
+      var y = graphH - (v / maxVal) * (graphH - 4) - 2;
+      y = Math.max(2, Math.min(graphH - 2, y));
+      if (i === 0) ctx.moveTo(x, y);
+      else {
+        var px = n > 1 ? w * (i - 1) / (n - 1) : 0;
+        var cpx = (px + x) / 2;
+        ctx.bezierCurveTo(cpx, graphH - (data[i-1] / maxVal) * (graphH - 4) - 2, cpx, y, x, y);
+      }
+    });
+    ctx.strokeStyle = strokeColor; ctx.lineWidth = 2;
+    ctx.shadowColor = strokeColor; ctx.shadowBlur = 8;
+    ctx.stroke(); ctx.shadowBlur = 0;
   }
-  drawLine(netRxHist, '#66bb6a');
-  drawLine(netTxHist, '#4fc3f7');
+  drawArea(netRxHist, '#aaff00', 'rgba(170,255,0,0.06)');
+  drawArea(netTxHist, '#00f0ff', 'rgba(0,240,255,0.04)');
   document.getElementById('net-scale').textContent = 'Peak: ' + formatBytes(maxVal, true);
 }
 
 function drawTempGraph() {
-  const canvas = document.getElementById('temp-canvas');
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
+  var canvas = document.getElementById('temp-canvas');
+  var w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * devicePixelRatio; canvas.height = h * devicePixelRatio;
+  var ctx = canvas.getContext('2d');
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   if (!tempHist.length) return;
 
-  const tMin=20, tMax=100, tRange=tMax-tMin;
-  const graphH = h-2;
-  const n = HISTORY_LEN;
+  var tMin=20, tMax=100, tRange=tMax-tMin;
+  var graphH = h-2;
+  var n = HISTORY_LEN;
   function yFor(t) { return Math.floor(graphH - ((t-tMin)/tRange)*(graphH-4) - 2); }
 
-  const yHot = yFor(80), yWarm = yFor(60);
-  ctx.fillStyle='#2a1015'; ctx.fillRect(0,0,w,yHot);
-  ctx.fillStyle='#2a2010'; ctx.fillRect(0,yHot,w,yWarm-yHot);
+  var yHot = yFor(80), yWarm = yFor(60);
+  ctx.fillStyle='rgba(239,83,80,0.05)'; ctx.fillRect(0,0,w,yHot);
+  ctx.fillStyle='rgba(255,167,38,0.04)'; ctx.fillRect(0,yHot,w,yWarm-yHot);
 
-  ctx.strokeStyle='#ef5350'; ctx.setLineDash([3,3]);
+  ctx.strokeStyle='rgba(239,83,80,0.3)'; ctx.setLineDash([3,3]);
   ctx.beginPath(); ctx.moveTo(0,yHot); ctx.lineTo(w,yHot); ctx.stroke();
-  ctx.fillStyle='#ef5350'; ctx.font='9px Helvetica'; ctx.textAlign='right';
+  ctx.fillStyle='rgba(239,83,80,0.6)'; ctx.font='9px "Share Tech Mono"'; ctx.textAlign='right';
   ctx.fillText('80\u00b0C', w-2, yHot-4);
 
-  ctx.strokeStyle='#ffa726';
+  ctx.strokeStyle='rgba(255,167,38,0.3)';
   ctx.beginPath(); ctx.moveTo(0,yWarm); ctx.lineTo(w,yWarm); ctx.stroke();
-  ctx.fillStyle='#ffa726';
+  ctx.fillStyle='rgba(255,167,38,0.6)';
   ctx.fillText('60\u00b0C', w-2, yWarm-4);
   ctx.setLineDash([]);
 
-  const latest = tempHist[tempHist.length-1];
-  const lineColor = latest < 60 ? '#66bb6a' : latest < 80 ? '#ffa726' : '#ef5350';
-  ctx.strokeStyle = lineColor; ctx.lineWidth = 2; ctx.beginPath();
-  tempHist.forEach((v,i) => {
-    const x = n>1 ? w*i/(n-1) : 0;
-    let y = yFor(v); y = Math.max(2, Math.min(graphH-2, y));
-    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  var latest = tempHist[tempHist.length-1];
+  var lineColor = latest < 60 ? '#66bb6a' : latest < 80 ? '#ffa726' : '#ef5350';
+
+  // Area fill
+  ctx.beginPath(); ctx.moveTo(0, h);
+  tempHist.forEach(function(v, i) {
+    var x = n>1 ? w*i/(n-1) : 0;
+    var y = yFor(v); y = Math.max(2, Math.min(graphH-2, y));
+    if (i === 0) ctx.lineTo(x, y);
+    else {
+      var px = n>1 ? w*(i-1)/(n-1) : 0;
+      var cpx = (px + x) / 2;
+      ctx.bezierCurveTo(cpx, yFor(tempHist[i-1]), cpx, y, x, y);
+    }
   });
-  ctx.stroke();
+  ctx.lineTo(w, h); ctx.closePath();
+  ctx.fillStyle = lineColor.replace(')', ',0.06)').replace('rgb', 'rgba');
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  tempHist.forEach(function(v, i) {
+    var x = n>1 ? w*i/(n-1) : 0;
+    var y = yFor(v); y = Math.max(2, Math.min(graphH-2, y));
+    if (i === 0) ctx.moveTo(x, y);
+    else {
+      var px = n>1 ? w*(i-1)/(n-1) : 0;
+      var cpx = (px + x) / 2;
+      ctx.bezierCurveTo(cpx, yFor(tempHist[i-1]), cpx, y, x, y);
+    }
+  });
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 2;
+  ctx.shadowColor = lineColor; ctx.shadowBlur = 8;
+  ctx.stroke(); ctx.shadowBlur = 0;
 }
 
 // --- Pool cards ---
-let _poolState = {};
+var _poolState = {};
 function updatePools(pools) {
-  const grid = document.getElementById('pool-grid');
-  const names = pools.map(p=>p.name);
-  // Remove stale cards
-  Object.keys(_poolState).forEach(n => { if (!names.includes(n)) {
-    const el = document.getElementById('pool-card-'+n); if (el) el.remove();
-    delete _poolState[n];
-  }});
-  pools.forEach((pool, idx) => {
-    const n = pool.name;
-    let card = document.getElementById('pool-card-'+n);
+  var grid = document.getElementById('pool-grid');
+  var names = pools.map(function(p) { return p.name; });
+  Object.keys(_poolState).forEach(function(n) {
+    if (!names.includes(n)) {
+      var el = document.getElementById('pool-card-'+n); if (el) el.remove();
+      delete _poolState[n];
+    }
+  });
+  pools.forEach(function(pool) {
+    var n = pool.name;
+    var card = document.getElementById('pool-card-'+n);
     if (!card || (_poolState[n]||{}).diskCount !== pool.disks.length) {
       if (card) card.remove();
       card = buildPoolCard(pool);
@@ -1457,97 +2350,148 @@ function updatePools(pools) {
 }
 
 function buildPoolCard(pool) {
-  const n = pool.name;
-  const div = document.createElement('div');
+  var n = pool.name;
+  var div = document.createElement('div');
   div.className = 'pool-card'; div.id = 'pool-card-'+n;
-  div.innerHTML = `
-    <div class="pool-title-row">
-      <span class="pool-name">Pool: ${esc(n)}</span>
-      <button class="map-btn" onclick='showDriveMap(${JSON.stringify(n)})'>Drive Map</button>
-    </div>
-    <div class="card-value" id="pv-${n}">--</div>
-    <div class="card-sub" id="ps-${n}"></div>
-    <div class="progress-track"><div class="progress-fill" id="pb-${n}"></div></div>
-    <div class="disk-row">
-      <span class="disk-lbl">Disks:</span>
-      <span id="pd-${n}"></span>
-    </div>`;
+
+  var titleRow = document.createElement('div');
+  titleRow.className = 'pool-title-row';
+  var nameEl = document.createElement('span');
+  nameEl.className = 'pool-name';
+  nameEl.textContent = 'POOL: ' + n.toUpperCase();
+  var mapBtn = document.createElement('button');
+  mapBtn.className = 'map-btn';
+  mapBtn.textContent = 'DRIVE MAP';
+  mapBtn.setAttribute('onclick', 'showDriveMap(' + JSON.stringify(n) + ')');
+  titleRow.appendChild(nameEl);
+  titleRow.appendChild(mapBtn);
+  div.appendChild(titleRow);
+
+  var val = document.createElement('div');
+  val.className = 'card-value'; val.id = 'pv-'+n; val.textContent = '--';
+  div.appendChild(val);
+
+  var sub = document.createElement('div');
+  sub.className = 'card-sub'; sub.id = 'ps-'+n;
+  div.appendChild(sub);
+
+  var track = document.createElement('div');
+  track.className = 'progress-track';
+  var fill = document.createElement('div');
+  fill.className = 'progress-fill'; fill.id = 'pb-'+n;
+  track.appendChild(fill);
+  div.appendChild(track);
+
+  var diskRow = document.createElement('div');
+  diskRow.className = 'disk-row';
+  var diskLbl = document.createElement('span');
+  diskLbl.className = 'disk-lbl'; diskLbl.textContent = 'Disks:';
+  var diskContainer = document.createElement('span');
+  diskContainer.id = 'pd-'+n;
+  diskRow.appendChild(diskLbl);
+  diskRow.appendChild(diskContainer);
+  div.appendChild(diskRow);
+
   return div;
 }
 
 function updatePoolCard(card, pool) {
-  const n = pool.name, pct = pool.percent||0;
-  const c = pct < 70 ? 'var(--good)' : pct < 85 ? 'var(--warning)' : 'var(--critical)';
+  var n = pool.name, pct = pool.percent||0;
+  var c = pct < 70 ? 'var(--lime)' : pct < 85 ? 'var(--gold)' : 'var(--magenta)';
   document.getElementById('pv-'+n).textContent = pct + '%';
   document.getElementById('pv-'+n).style.color = c;
-  const pb = document.getElementById('pb-'+n);
-  pb.style.width = pct+'%'; pb.style.background = c;
+  document.getElementById('pv-'+n).style.textShadow = '0 0 15px ' + c;
+  var pb = document.getElementById('pb-'+n);
+  pb.style.width = pct+'%';
+  pb.style.background = 'linear-gradient(90deg, var(--purple), ' + c + ')';
+  pb.style.boxShadow = '0 0 12px ' + c;
   document.getElementById('ps-'+n).textContent =
     formatBytes(pool.used) + ' / ' + formatBytes(pool.total) +
     '  (' + formatBytes(pool.available) + ' free)';
-  const pd = document.getElementById('pd-'+n);
-  pd.innerHTML = '';
-  (pool.disks||[]).forEach(d => {
-    const ind = document.createElement('span');
+  var pd = document.getElementById('pd-'+n);
+  while (pd.firstChild) pd.removeChild(pd.firstChild);
+  (pool.disks||[]).forEach(function(d) {
+    var ind = document.createElement('span');
     ind.className = 'disk-ind';
-    ind.style.background = d.has_error ? 'var(--critical)' : 'var(--good)';
+    var diskColor = d.has_error ? 'var(--critical)' : 'var(--lime)';
+    ind.style.background = diskColor;
+    ind.style.color = diskColor;
     ind.title = d.name;
     pd.appendChild(ind);
   });
-  // Store topology for drive map
   if (pool.topology) { window['_topo_'+n] = pool.topology; }
 }
 
 // --- Drive Map ---
 function showDriveMap(name) {
-  const topo = window['_topo_'+name] || {};
-  document.getElementById('modal-title').textContent = 'Pool: ' + name;
-  const content = document.getElementById('modal-content');
-  content.innerHTML = '';
+  var topo = window['_topo_'+name] || {};
+  document.getElementById('modal-title').textContent = 'POOL: ' + name.toUpperCase();
+  var content = document.getElementById('modal-content');
+  while (content.firstChild) content.removeChild(content.firstChild);
 
-  const groupLabels = {
-    data:'Data VDevs', cache:'Cache (L2ARC)', log:'Log (SLOG)',
-    spare:'Hot Spares', special:'Special VDevs', dedup:'Dedup VDevs'
+  var groupLabels = {
+    data:'DATA VDEVS', cache:'CACHE (L2ARC)', log:'LOG (SLOG)',
+    spare:'HOT SPARES', special:'SPECIAL VDEVS', dedup:'DEDUP VDEVS'
   };
-  let hasContent = false;
-  ['data','cache','log','spare','special','dedup'].forEach(gk => {
-    const vdevs = topo[gk];
+  var hasContent = false;
+  ['data','cache','log','spare','special','dedup'].forEach(function(gk) {
+    var vdevs = topo[gk];
     if (!vdevs || !vdevs.length) return;
     hasContent = true;
-    const glbl = document.createElement('div');
+    var glbl = document.createElement('div');
     glbl.className = 'vdev-group-label';
     glbl.textContent = groupLabels[gk]||gk;
     content.appendChild(glbl);
 
-    vdevs.forEach(vdev => {
-      const vtype = vdev.type||'DISK', vstatus = vdev.status||'ONLINE';
-      const icon = vtype==='MIRROR'?'\u2194':vtype.startsWith('RAIDZ')?'\u2726':vtype==='STRIPE'?'\u2502':'\u25cb';
-      const stColor = vstatus==='ONLINE'?'var(--good)':'var(--critical)';
-      const box = document.createElement('div'); box.className = 'vdev-box';
-      box.innerHTML = `<div class="vdev-hdr">
-        <span class="vdev-type">${icon}  ${esc(vtype)}</span>
-        <span class="vdev-status" style="color:${stColor}">${esc(vstatus)}</span>
-      </div><div class="disk-cards" id="dc-tmp"></div>`;
-      const dc = box.querySelector('.disk-cards');
-      (vdev.disks||[]).forEach((disk, di) => {
-        const hasErr = disk.errors>0 || !['ONLINE',''].includes(disk.status||'');
-        const dbg = hasErr?'#5c1a1a':'#1a2a1a', dbc = hasErr?'var(--critical)':'var(--good)';
-        const stTxt = disk.errors>0 ? `${disk.status} (${disk.errors} err)` : disk.status;
+    vdevs.forEach(function(vdev) {
+      var vtype = vdev.type||'DISK', vstatus = vdev.status||'ONLINE';
+      var icon = vtype==='MIRROR'?'\u2194':vtype.startsWith('RAIDZ')?'\u2726':vtype==='STRIPE'?'\u2502':'\u25cb';
+      var stColor = vstatus==='ONLINE'?'var(--lime)':'var(--critical)';
+      var box = document.createElement('div'); box.className = 'vdev-box';
+
+      var hdr = document.createElement('div'); hdr.className = 'vdev-hdr';
+      var typeEl = document.createElement('span'); typeEl.className = 'vdev-type';
+      typeEl.textContent = icon + '  ' + vtype;
+      var stEl = document.createElement('span'); stEl.className = 'vdev-status';
+      stEl.style.color = stColor; stEl.textContent = vstatus;
+      hdr.appendChild(typeEl); hdr.appendChild(stEl);
+      box.appendChild(hdr);
+
+      var dc = document.createElement('div'); dc.className = 'disk-cards';
+      (vdev.disks||[]).forEach(function(disk, di) {
+        var hasErr = disk.errors>0 || !['ONLINE',''].includes(disk.status||'');
+        var dbg = hasErr?'rgba(92,26,26,0.5)':'rgba(26,42,26,0.5)';
+        var dbc = hasErr?'var(--critical)':'var(--lime)';
+        var stTxt = disk.errors>0 ? disk.status + ' (' + disk.errors + ' err)' : disk.status;
         if (di>0 && ['MIRROR','RAIDZ1','RAIDZ2','RAIDZ3'].includes(vtype)) {
-          const conn = document.createElement('span'); conn.className='disk-connector';
+          var conn = document.createElement('span'); conn.className='disk-connector';
           conn.textContent='\u2500\u2500'; dc.appendChild(conn);
         }
-        const dcard = document.createElement('div');
+        var dcard = document.createElement('div');
         dcard.className='disk-card';
-        dcard.style.cssText=`background:${dbg};border:2px solid ${dbc}`;
-        dcard.innerHTML=`<div class="disk-card-name" style="color:${hasErr?'#fff':'var(--text)'}">${esc(disk.name)}</div>
-          <div class="disk-card-status" style="color:${dbc}">${esc(stTxt)}</div>`;
+        dcard.style.cssText='background:'+dbg+';border:2px solid '+dbc;
+        var dname = document.createElement('div');
+        dname.className='disk-card-name';
+        dname.style.color = hasErr ? '#fff' : 'var(--text)';
+        dname.textContent = disk.name;
+        var dstatus = document.createElement('div');
+        dstatus.className='disk-card-status';
+        dstatus.style.color = dbc;
+        dstatus.textContent = stTxt;
+        dcard.appendChild(dname);
+        dcard.appendChild(dstatus);
         dc.appendChild(dcard);
       });
+      box.appendChild(dc);
       content.appendChild(box);
     });
   });
-  if (!hasContent) content.innerHTML = '<div style="color:var(--text-dim);padding:20px">No topology data available</div>';
+  if (!hasContent) {
+    var noData = document.createElement('div');
+    noData.style.cssText = 'color:var(--text-dim);padding:20px;font-family:Share Tech Mono,monospace';
+    noData.textContent = 'No topology data available';
+    content.appendChild(noData);
+  }
   document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -1556,11 +2500,18 @@ function closeModalBtn() { document.getElementById('modal-overlay').classList.re
 
 // --- Alerts ---
 function appendAlert(d) {
-  const log = document.getElementById('alert-log');
-  const entry = document.createElement('div'); entry.className='alert-entry';
-  const cls = 'alert-'+d.severity;
-  const prefix = {critical:'CRITICAL',warning:'WARNING',info:'INFO',resolved:'RESOLVED'}[d.severity]||'INFO';
-  entry.innerHTML = `<span class="alert-ts">[${esc(d.time)}]</span> <span class="${cls}">${prefix}:</span> ${esc(d.message)}`;
+  var log = document.getElementById('alert-log');
+  var entry = document.createElement('div'); entry.className='alert-entry';
+  var cls = 'alert-'+d.severity;
+  var prefix = {critical:'CRITICAL',warning:'WARNING',info:'INFO',resolved:'RESOLVED'}[d.severity]||'INFO';
+  var ts = document.createElement('span'); ts.className = 'alert-ts';
+  ts.textContent = '[' + d.time + '] ';
+  var sev = document.createElement('span'); sev.className = cls;
+  sev.textContent = prefix + ': ';
+  var msg = document.createTextNode(d.message);
+  entry.appendChild(ts);
+  entry.appendChild(sev);
+  entry.appendChild(msg);
   log.insertBefore(entry, log.firstChild);
   alertCount++;
   document.getElementById('alert-count-lbl').textContent = alertCount + ' alert' + (alertCount!==1?'s':'');
@@ -1573,20 +2524,21 @@ function appendAlert(d) {
 }
 
 function clearAlertsUI() {
-  document.getElementById('alert-log').innerHTML = '';
+  var log = document.getElementById('alert-log');
+  while (log.firstChild) log.removeChild(log.firstChild);
   alertCount = 0; unreadAlerts = 0;
   document.getElementById('alert-count-lbl').textContent = '0 alerts';
   updateAlertBadge();
 }
 
 function clearAlerts() {
-  fetch('/api/alerts/clear', {method:'POST'}).catch(()=>{});
+  fetch('/api/alerts/clear', {method:'POST'}).catch(function(){});
   clearAlertsUI();
 }
 
 // --- Settings form ---
 function loadSettingsForm() {
-  fetch('/api/config').then(r=>r.json()).then(cfg => {
+  fetch('/api/config').then(function(r) { return r.json(); }).then(function(cfg) {
     document.getElementById('s-host').value = cfg.host||'';
     document.getElementById('s-apikey').value = cfg.api_key||'';
     document.getElementById('s-user').value = cfg.username||'';
@@ -1602,42 +2554,42 @@ function loadSettingsForm() {
     document.getElementById('s-web-user').value = cfg.web_username||'client';
     document.getElementById('s-web-pass').value = '';
     document.getElementById('s-web-pass2').value = '';
-    fetch('/api/broadcast_status').then(r=>r.json()).then(d => {
+    fetch('/api/broadcast_status').then(function(r) { return r.json(); }).then(function(d) {
       document.getElementById('broadcast-status').textContent = d.text;
-    }).catch(()=>{});
-  }).catch(()=>{});
+    }).catch(function(){});
+  }).catch(function(){});
 }
 
 function updateHttpsPort() {
-  const p = parseInt(document.getElementById('s-web-port').value)||8088;
+  var p = parseInt(document.getElementById('s-web-port').value)||8088;
   document.getElementById('s-https-port').value = p + 1;
 }
 
 // Populate temp threshold dropdown
 (function() {
-  const sel = document.getElementById('s-temp-thresh');
-  for (let t=40;t<=96;t++) {
-    const opt = document.createElement('option');
+  var sel = document.getElementById('s-temp-thresh');
+  for (var t=40;t<=96;t++) {
+    var opt = document.createElement('option');
     opt.value=t; opt.textContent=t+'\u00b0C'; sel.appendChild(opt);
   }
 })();
 
 function saveSettings() {
-  const host = document.getElementById('s-host').value.trim();
-  const apiKey = document.getElementById('s-apikey').value.trim();
-  const user = document.getElementById('s-user').value.trim();
-  const pass = document.getElementById('s-pass').value.trim();
+  var host = document.getElementById('s-host').value.trim();
+  var apiKey = document.getElementById('s-apikey').value.trim();
+  var user = document.getElementById('s-user').value.trim();
+  var pass = document.getElementById('s-pass').value.trim();
   if (!host) { showMsg('Please enter an IP address or hostname.', 'critical'); return; }
   if (!apiKey && !(user && pass)) { showMsg('Provide an API key or username & password.', 'critical'); return; }
-  const webUser = document.getElementById('s-web-user').value.trim();
-  const webPass = document.getElementById('s-web-pass').value;
-  const webPass2 = document.getElementById('s-web-pass2').value;
+  var webUser = document.getElementById('s-web-user').value.trim();
+  var webPass = document.getElementById('s-web-pass').value;
+  var webPass2 = document.getElementById('s-web-pass2').value;
   if (webPass && webPass !== webPass2) {
     showMsg('New passwords do not match.', 'err'); return;
   }
   if (!webUser) { showMsg('Web username cannot be empty.', 'err'); return; }
-  const body = {
-    host, api_key: apiKey, username: user, password: pass,
+  var body = {
+    host: host, api_key: apiKey, username: user, password: pass,
     interval: parseInt(document.getElementById('s-interval').value)||5,
     temp_threshold: parseInt(document.getElementById('s-temp-thresh').value)||82,
     broadcast_enabled: document.getElementById('s-bcast-enabled').checked,
@@ -1649,47 +2601,50 @@ function saveSettings() {
     web_password: webPass,
   };
   fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
-    .then(r=>r.json()).then(d => {
+    .then(function(r) { return r.json(); }).then(function(d) {
       showMsg(d.message || 'Saved.', d.ok ? 'ok' : 'err');
-    }).catch(e => showMsg('Error: '+e, 'err'));
+    }).catch(function(e) { showMsg('Error: '+e, 'err'); });
 }
 
 function showMsg(msg, state) {
-  const el = document.getElementById('settings-msg');
+  var el = document.getElementById('settings-msg');
   el.textContent = msg;
-  el.style.color = state==='ok' ? 'var(--good)' : state==='err' ? 'var(--critical)' : 'var(--text-dim)';
+  el.style.color = state==='ok' ? 'var(--lime)' : state==='err' ? 'var(--critical)' : 'var(--text-dim)';
 }
 
 function disconnectNow() {
-  fetch('/api/disconnect', {method:'POST'}).catch(()=>{});
+  fetch('/api/disconnect', {method:'POST'}).catch(function(){});
 }
 
 function toggleDemo() {
-  fetch('/api/demo', {method:'POST'}).then(r=>r.json()).then(d => {
+  fetch('/api/demo', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
     demoActive = d.active;
-    const btn = document.getElementById('demo-btn');
-    btn.textContent = demoActive ? 'Stop Demo' : 'Demo Mode';
-    btn.style.background = demoActive ? 'var(--critical)' : 'var(--warning)';
+    var btn = document.getElementById('demo-btn');
+    btn.textContent = demoActive ? 'STOP DEMO' : 'DEMO MODE';
+    btn.style.background = demoActive ? 'linear-gradient(135deg, var(--critical), var(--magenta))' : 'linear-gradient(135deg, var(--orange), var(--gold))';
+    btn.style.color = demoActive ? '#fff' : '#000';
     document.getElementById('save-btn').disabled = demoActive;
-  }).catch(()=>{});
+  }).catch(function(){});
 }
 
 function toggleShow(id, btn) {
-  const el = document.getElementById(id);
-  if (el.type==='password') { el.type='text'; btn.textContent='Hide'; }
-  else { el.type='password'; btn.textContent='Show'; }
+  var el = document.getElementById(id);
+  if (el.type==='password') { el.type='text'; btn.textContent='HIDE'; }
+  else { el.type='password'; btn.textContent='SHOW'; }
 }
 
 // --- Utilities ---
 function formatBytes(v, ps) {
   if (v==null) return 'N/A';
-  const sfx = ps ? '/s' : '';
-  for (const u of ['B','KB','MB','GB','TB']) {
-    if (Math.abs(v) < 1024) return v.toFixed(1)+' '+u+sfx;
+  var sfx = ps ? '/s' : '';
+  var units = ['B','KB','MB','GB','TB'];
+  for (var u = 0; u < units.length; u++) {
+    if (Math.abs(v) < 1024) return v.toFixed(1)+' '+units[u]+sfx;
     v /= 1024;
   }
   return v.toFixed(1)+' PB'+sfx;
 }
+
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
                   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1701,13 +2656,14 @@ if ('Notification' in window && Notification.permission==='default') {
 }
 
 // Load existing alerts on page load
-fetch('/api/alerts').then(r=>r.json()).then(list => {
-  list.forEach(a => appendAlert(a));
-}).catch(()=>{});
+fetch('/api/alerts').then(function(r) { return r.json(); }).then(function(list) {
+  list.forEach(function(a) { appendAlert(a); });
+}).catch(function(){});
 
 // Init
 loadSettingsForm();
 connectSSE();
+window.addEventListener('resize', function() { drawNetGraph(); drawTempGraph(); });
 </script>
 </body>
 </html>
