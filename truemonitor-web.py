@@ -914,15 +914,6 @@ a { color: var(--cyan); }
     linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px);
   background-size: 60px 60px;
-  animation: gridScroll 20s linear infinite;
-  transform: perspective(600px) rotateX(45deg);
-  transform-origin: center 120%;
-  height: 140%; top: -20%;
-}
-
-@keyframes gridScroll {
-  0% { background-position: 0 0; }
-  100% { background-position: 0 60px; }
 }
 
 /* === FLOATING 3D SHAPES === */
@@ -932,14 +923,15 @@ a { color: var(--cyan); }
   pointer-events: none;
   animation: floatElement linear infinite;
   opacity: 0.06;
+  will-change: transform;
 }
 
 @keyframes floatElement {
-  0% { transform: translate3d(0, 0, 0) rotate3d(1, 1, 0, 0deg); }
-  25% { transform: translate3d(var(--fx), var(--fy), 50px) rotate3d(1, 1, 0, 90deg); }
-  50% { transform: translate3d(0, var(--fy2), 100px) rotate3d(1, 1, 0, 180deg); }
-  75% { transform: translate3d(var(--fx2), 0, 50px) rotate3d(1, 1, 0, 270deg); }
-  100% { transform: translate3d(0, 0, 0) rotate3d(1, 1, 0, 360deg); }
+  0% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(var(--fx), var(--fy)) rotate(90deg); }
+  50% { transform: translate(0, var(--fy2)) rotate(180deg); }
+  75% { transform: translate(var(--fx2), 0) rotate(270deg); }
+  100% { transform: translate(0, 0) rotate(360deg); }
 }
 
 .hex-shape {
@@ -964,15 +956,16 @@ a { color: var(--cyan); }
 }
 
 .scan-beam {
-  position: fixed; left: 0; right: 0; height: 2px;
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, transparent, rgba(0,240,255,0.08), transparent);
   z-index: 101; pointer-events: none;
   animation: scanBeam 6s linear infinite;
+  will-change: transform;
 }
 
 @keyframes scanBeam {
-  0% { top: -2px; }
-  100% { top: 100%; }
+  0% { transform: translateY(-2px); }
+  100% { transform: translateY(100vh); }
 }
 
 /* === HEADER === */
@@ -980,8 +973,7 @@ a { color: var(--cyan); }
   position: relative; z-index: 10;
   display: flex; align-items: center; padding: 12px 20px;
   border-bottom: 1px solid var(--card-border);
-  background: rgba(6, 8, 15, 0.8);
-  backdrop-filter: blur(20px);
+  background: rgba(6, 8, 15, 0.95);
   animation: slideInDown 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -1065,9 +1057,8 @@ a { color: var(--cyan); }
 #tab-bar {
   position: relative; z-index: 10;
   display: flex;
-  background: rgba(10, 18, 40, 0.5);
+  background: rgba(8, 14, 32, 0.95);
   border-bottom: 1px solid var(--card-border);
-  backdrop-filter: blur(10px);
 }
 
 .tab-btn {
@@ -1134,13 +1125,12 @@ a { color: var(--cyan); }
 #info-bar {
   margin: 12px 16px 8px;
   padding: 10px 16px;
-  background: var(--bg-card);
+  background: rgba(10, 18, 40, 0.9);
   border: 1px solid var(--card-border);
   border-radius: 10px;
   font-family: 'Share Tech Mono', monospace;
   font-size: 12px;
   color: var(--text-dim);
-  backdrop-filter: blur(10px);
   animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
 }
 
@@ -1158,17 +1148,14 @@ a { color: var(--cyan); }
 }
 
 .card {
-  background: var(--bg-card);
+  background: rgba(10, 18, 40, 0.85);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
   transform-style: preserve-3d;
-  will-change: transform;
 }
 
 .card::before {
@@ -1303,11 +1290,10 @@ a { color: var(--cyan); }
 }
 
 .pool-card {
-  background: var(--bg-card);
+  background: rgba(10, 18, 40, 0.85);
   border: 1px solid rgba(170,68,255,0.12);
   border-radius: 14px;
   padding: 16px 18px;
-  backdrop-filter: blur(20px);
   position: relative;
   overflow: hidden;
   transition: all 0.3s ease;
@@ -1447,7 +1433,7 @@ a { color: var(--cyan); }
 }
 
 #alert-log {
-  background: var(--bg-card);
+  background: rgba(10, 18, 40, 0.9);
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   margin: 0 16px 16px;
@@ -1457,7 +1443,6 @@ a { color: var(--cyan); }
   font-family: 'Share Tech Mono', monospace;
   font-size: 12px;
   line-height: 1.7;
-  backdrop-filter: blur(20px);
   scrollbar-width: thin;
   scrollbar-color: rgba(255,68,170,0.2) transparent;
 }
@@ -1639,16 +1624,14 @@ a { color: var(--cyan); }
   font-family: 'Share Tech Mono', monospace;
   font-size: 10px;
   color: var(--text-dim);
-  background: rgba(6,8,15,0.8);
+  background: rgba(6,8,15,0.95);
   border-top: 1px solid var(--card-border);
-  backdrop-filter: blur(10px);
 }
 
 /* === DRIVE MAP MODAL === */
 #modal-overlay {
   display: none; position: fixed; inset: 0;
-  background: rgba(6,8,15,0.85);
-  backdrop-filter: blur(8px);
+  background: rgba(6,8,15,0.92);
   z-index: 1000;
   justify-content: center;
   align-items: flex-start;
