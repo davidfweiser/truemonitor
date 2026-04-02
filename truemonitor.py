@@ -404,18 +404,22 @@ class BroadcastServer:
 
 
 COLORS = {
-    "bg": "#1a1a2e",
-    "card": "#16213e",
-    "card_border": "#0f3460",
-    "text": "#e0e0e0",
-    "text_dim": "#888899",
-    "accent": "#4fc3f7",
+    "bg": "#06080f",
+    "card": "#0a1228",
+    "card_border": "#1a3a6a",
+    "text": "#e8eaf6",
+    "text_dim": "#6878a0",
+    "accent": "#00f0ff",
     "good": "#66bb6a",
     "warning": "#ffa726",
     "critical": "#ef5350",
-    "input_bg": "#0f3460",
-    "button": "#533483",
-    "button_hover": "#6a42a0",
+    "input_bg": "#0f193c",
+    "button": "#1a3399",
+    "button_hover": "#2244bb",
+    "magenta": "#ff00aa",
+    "lime": "#aaff00",
+    "orange_accent": "#ff6600",
+    "purple": "#aa44ff",
 }
 
 
@@ -889,7 +893,7 @@ class _Tooltip:
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         lbl = tk.Label(
-            tw, text=self.text, bg="#333344", fg="#e0e0e0",
+            tw, text=self.text, bg="#1a2040", fg=COLORS["text"],
             font=("Helvetica", 9), padx=6, pady=2, relief="solid", bd=1,
         )
         lbl.pack()
@@ -1061,7 +1065,7 @@ class TrueMonitorApp:
             "CardTitle.TLabel": {"bg": COLORS["card"], "fg": COLORS["accent"],
                                  "font": ("Helvetica", self._sf(12), "bold")},
             "CardValue.TLabel": {"bg": COLORS["card"], "fg": COLORS["text"],
-                                  "font": ("Helvetica", self._sf(16), "bold")},
+                                  "font": ("Courier", self._sf(16), "bold")},
             "CardSub.TLabel": {"bg": COLORS["card"], "fg": COLORS["text_dim"],
                                 "font": ("Helvetica", self._sf(10))},
             "Status.TLabel": {"bg": COLORS["bg"], "fg": COLORS["text_dim"],
@@ -1106,6 +1110,14 @@ class TrueMonitorApp:
         self.root.option_add("*TCombobox*Listbox.selectBackground", COLORS["card_border"])
         self.root.option_add("*TCombobox*Listbox.selectForeground", COLORS["text"])
         self.root.option_add("*TCombobox*Listbox.font", ("Helvetica", self._sf(11)))
+
+        s.configure(
+            "MemBar.Horizontal.TProgressbar",
+            background=COLORS["magenta"],
+            troughcolor=COLORS["input_bg"],
+            borderwidth=0,
+            thickness=20,
+        )
 
         for color_name, color_val in (("green", COLORS["good"]),
                                        ("yellow", COLORS["warning"]),
@@ -1161,15 +1173,17 @@ class TrueMonitorApp:
                                fg=COLORS["text_dim"], font=("Helvetica", self._sf(9)))
         self.footer.pack(side=tk.LEFT)
 
-    def _make_card(self, parent, title, row, col):
+    def _make_card(self, parent, title, row, col, color=None):
+        accent = color or COLORS["accent"]
         f = tk.Frame(
             parent, bg=COLORS["card"],
-            highlightbackground=COLORS["card_border"], highlightthickness=1,
+            highlightbackground=accent, highlightthickness=1,
             padx=18, pady=14,
         )
         f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
 
-        ttk.Label(f, text=title, style="CardTitle.TLabel").pack(anchor="w")
+        tk.Label(f, text=title, bg=COLORS["card"], fg=accent,
+                 font=("Helvetica", self._sf(12), "bold")).pack(anchor="w")
         val = ttk.Label(f, text="--", style="CardValue.TLabel")
         val.pack(anchor="w", pady=(10, 4))
         sub = ttk.Label(f, text="", style="CardSub.TLabel")
@@ -1178,9 +1192,11 @@ class TrueMonitorApp:
         bar = bar_var = None
         if title in ("CPU Usage", "Memory"):
             bar_var = tk.DoubleVar(value=0)
+            bar_style = ("MemBar.Horizontal.TProgressbar" if title == "Memory"
+                         else "Horizontal.TProgressbar")
             bar = ttk.Progressbar(
                 f, variable=bar_var, maximum=100,
-                style="Horizontal.TProgressbar", length=220,
+                style=bar_style, length=220,
             )
             bar.pack(fill=tk.X, pady=(10, 0))
 
@@ -1209,15 +1225,15 @@ class TrueMonitorApp:
         self.grid.rowconfigure(0, weight=1)
         self.grid.rowconfigure(1, weight=1)
 
-        self.cpu_card = self._make_card(self.grid, "CPU Usage", 0, 0)
-        self.mem_card = self._make_card(self.grid, "Memory", 0, 1)
+        self.cpu_card = self._make_card(self.grid, "CPU Usage", 0, 0, color=COLORS["accent"])
+        self.mem_card = self._make_card(self.grid, "Memory", 0, 1, color=COLORS["magenta"])
         self._build_net_graph(self.grid, 1, 0)
         self._build_temp_graph(self.grid, 1, 1)
 
     def _build_net_graph(self, parent, row, col):
         f = tk.Frame(
             parent, bg=COLORS["card"],
-            highlightbackground=COLORS["card_border"], highlightthickness=1,
+            highlightbackground=COLORS["lime"], highlightthickness=1,
             padx=18, pady=14,
         )
         f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
@@ -1225,8 +1241,8 @@ class TrueMonitorApp:
         # Title row
         hdr = tk.Frame(f, bg=COLORS["card"])
         hdr.pack(fill=tk.X)
-        ttk.Label(hdr, text="Network", style="CardTitle.TLabel").pack(
-            side=tk.LEFT)
+        tk.Label(hdr, text="Network", bg=COLORS["card"], fg=COLORS["lime"],
+                 font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
 
         # Legend (right side of title)
         leg = tk.Frame(hdr, bg=COLORS["card"])
@@ -1258,7 +1274,7 @@ class TrueMonitorApp:
 
         # Canvas for the graph
         self.net_canvas = tk.Canvas(
-            f, bg="#0a1628", highlightthickness=0, height=120)
+            f, bg="#03060e", highlightthickness=0, height=120)
         self.net_canvas.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
         # Y-axis scale label
@@ -1289,7 +1305,7 @@ class TrueMonitorApp:
         # Draw horizontal grid lines
         for i in range(1, 4):
             y = int(graph_h * i / 4)
-            c.create_line(0, y, w, y, fill="#1a2a4a", dash=(2, 4))
+            c.create_line(0, y, w, y, fill="#0d1a30", dash=(2, 4))
 
         # Draw data lines
         def draw_line(data, color):
@@ -1315,7 +1331,7 @@ class TrueMonitorApp:
     def _build_temp_graph(self, parent, row, col):
         f = tk.Frame(
             parent, bg=COLORS["card"],
-            highlightbackground=COLORS["card_border"], highlightthickness=1,
+            highlightbackground=COLORS["orange_accent"], highlightthickness=1,
             padx=18, pady=14,
         )
         f.grid(row=row, column=col, padx=16, pady=16, sticky="nsew")
@@ -1323,8 +1339,8 @@ class TrueMonitorApp:
         # Title row
         hdr = tk.Frame(f, bg=COLORS["card"])
         hdr.pack(fill=tk.X)
-        ttk.Label(hdr, text="CPU Temperature", style="CardTitle.TLabel").pack(
-            side=tk.LEFT)
+        tk.Label(hdr, text="CPU Temperature", bg=COLORS["card"], fg=COLORS["orange_accent"],
+                 font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
 
         # Current temp and status
         temp_f = tk.Frame(f, bg=COLORS["card"])
@@ -1344,7 +1360,7 @@ class TrueMonitorApp:
 
         # Canvas for the graph
         self.temp_canvas = tk.Canvas(
-            f, bg="#0a1628", highlightthickness=0, height=120)
+            f, bg="#03060e", highlightthickness=0, height=120)
         self.temp_canvas.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
     def _draw_temp_graph(self):
@@ -1374,10 +1390,10 @@ class TrueMonitorApp:
 
         # Hot zone (80+)
         y_hot = y_for_temp(80)
-        c.create_rectangle(0, 0, w, y_hot, fill="#2a1015", outline="")
+        c.create_rectangle(0, 0, w, y_hot, fill="#1a0510", outline="")
         # Warm zone (60-80)
         y_warm = y_for_temp(60)
-        c.create_rectangle(0, y_hot, w, y_warm, fill="#2a2010", outline="")
+        c.create_rectangle(0, y_hot, w, y_warm, fill="#1a1508", outline="")
 
         # Threshold lines
         c.create_line(0, y_hot, w, y_hot, fill=COLORS["critical"], dash=(3, 3))
@@ -1436,15 +1452,16 @@ class TrueMonitorApp:
 
             f = tk.Frame(
                 self.grid, bg=COLORS["card"],
-                highlightbackground=COLORS["card_border"], highlightthickness=1,
+                highlightbackground=COLORS["purple"], highlightthickness=1,
                 padx=18, pady=8,
             )
             f.grid(row=row, column=col, padx=16, pady=8, sticky="ew")
 
             title_row = tk.Frame(f, bg=COLORS["card"])
             title_row.pack(fill=tk.X)
-            ttk.Label(title_row, text=f"Pool: {name}", style="CardTitle.TLabel").pack(
-                side=tk.LEFT)
+            tk.Label(title_row, text=f"Pool: {name}", bg=COLORS["card"],
+                     fg=COLORS["purple"],
+                     font=("Helvetica", self._sf(12), "bold")).pack(side=tk.LEFT)
             topo = pool.get("topology", {})
             import sys as _sys
             _map_bg = "#ffffff" if _sys.platform == "win32" else COLORS["button"]
@@ -1626,7 +1643,7 @@ class TrueMonitorApp:
                     derrors = disk.get("errors", 0)
 
                     has_err = derrors > 0 or dstatus not in ("ONLINE", "")
-                    disk_bg = "#1a2a1a" if not has_err else "#5c1a1a"
+                    disk_bg = "#0a1a0a" if not has_err else "#3d0d0d"
                     border_col = COLORS["good"] if not has_err else COLORS["critical"]
 
                     disk_box = tk.Frame(
@@ -2144,8 +2161,8 @@ class TrueMonitorApp:
         self.disc_btn.pack(side=tk.LEFT)
 
         self.demo_btn = tk.Button(
-            bf, text="Demo Mode", bg=COLORS["warning"], fg="#1a1a2e",
-            activebackground="#ffb74d", activeforeground="#1a1a2e",
+            bf, text="Demo Mode", bg=COLORS["warning"], fg=COLORS["bg"],
+            activebackground="#ffb74d", activeforeground=COLORS["bg"],
             font=("Helvetica", self._sf(11), "bold"), relief="flat", padx=22, pady=8,
             command=self._toggle_demo,
         )
