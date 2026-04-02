@@ -25,8 +25,10 @@ Four companion apps can display the same live data remotely: **TrueMonitor Web**
 ### Features
 
 #### Monitor Tab
+- **Cyberpunk neon aesthetic** — dark deep-space background (#06080f) with per-card neon accent colors: cyan (CPU), magenta (Memory), lime (Network), orange (Temperature), purple (Pools) — matching the web dashboard's color palette
+- **Monospaced metric values** — CardValue labels use Courier font for a sci-fi command center feel matching the web's Share Tech Mono
 - **CPU Usage** - Real-time percentage with color-coded progress bar and load average
-- **Memory Usage** - Used/total with percentage bar
+- **Memory Usage** - Used/total with magenta progress bar
 - **Network I/O** - Scrolling line graph showing receive (green) and transmit (blue) speeds with auto-scaling Y-axis
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
 - **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Window auto-expands to show all pool cards on connect without manual resizing.
