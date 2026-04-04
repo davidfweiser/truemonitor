@@ -31,7 +31,7 @@ Four companion apps can display the same live data remotely: **TrueMonitor Web**
 - **Memory Usage** - Used/total with magenta progress bar
 - **Network I/O** - Scrolling line graph showing receive (green) and transmit (blue) speeds with auto-scaling Y-axis
 - **CPU Temperature** - Scrolling line graph with color-coded temperature zones (green/yellow/red), threshold lines at 60°C and 80°C
-- **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Window auto-expands to show all pool cards on connect without manual resizing.
+- **Storage Pools** - Dynamic cards for each ZFS pool showing capacity percentage, used/total/free space, and color-coded progress bars (green <70%, yellow <85%, red >=85%). Usage reflects true consumed space including snapshots and ZFS overhead, matching what TrueNAS reports. Window auto-expands to show all pool cards on connect without manual resizing.
 - **Disk Health Indicators** - Each pool card displays a compact colored rectangle per disk (green = healthy, red = errors). Hover to see the drive name. Icons and spacing are sized to keep cards compact.
 - **Drive Map** - Per-pool popup showing the complete vdev layout (Mirror, RAIDZ1/2/3, Stripe, cache, log, spare). Drives with errors highlighted in red.
 - **Dynamic font scaling** - Card fonts (value labels, titles, sub-labels) scale proportionally as you resize the window. Font Size setting (Small/Medium/Large) sets the baseline; window width adjusts from there.
@@ -129,7 +129,7 @@ Reads saved settings from `~/.config/truemonitor/config.json` automatically, so 
 
 ### Features
 
-- **Monitor view** — CPU usage + load average, memory, network RX/TX, CPU temperature, and ZFS pool capacity with per-disk health
+- **Monitor view** — CPU usage + load average, memory, network RX/TX, CPU temperature, and ZFS pool capacity (including snapshots) with per-disk health
 - **Alerts view** — Color-coded alert log (critical/warning/info/resolved) with timestamps; TrueNAS system alerts included
 - **Settings form** — Host, API key, username/password, poll interval, temp threshold, and broadcast server toggle/port/key; all editable in-terminal
 - **Broadcast server** — Same encrypted TCP broadcast as `truemonitor.py`; enable in settings to push data to TrueMonClient instances
