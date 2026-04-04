@@ -43,6 +43,11 @@ struct MonitorView: View {
                             PoolCard(pool: pool)
                         }
                     }
+
+                    // Jobs card (only shown when jobs are running)
+                    if let jobs = stats.jobs, !jobs.isEmpty {
+                        JobsCard(jobs: jobs)
+                    }
                 } else if data.connectionState == .connected {
                     Text("Waiting for data...")
                         .font(.system(.body, design: .monospaced))

@@ -382,6 +382,8 @@ class TrueMonClientApp:
         self._seen_truenas_alerts = set()
         self.pool_cards = {}
         self._pool_count = 0
+        self._jobs_card_frame = None
+        self._jobs_list_frame = None
         self._font_scale = FONT_SCALES.get(
             self.config.get("font_size", "Medium"), 1.0)
 
@@ -983,6 +985,24 @@ class TrueMonClientApp:
                 "disk_label": disk_label, "topology": topo, "map_btn": map_btn,
             }
 
+        # Jobs card — spans both columns, below all pool rows
+        jobs_row = 2 + math.ceil(num_pools / 2)
+        self.grid.rowconfigure(jobs_row, weight=0)
+        if hasattr(self, "_jobs_card_frame") and self._jobs_card_frame:
+            self._jobs_card_frame.destroy()
+        jf = tk.Frame(
+            self.grid, bg=COLORS["card"],
+            highlightbackground=COLORS["warning"], highlightthickness=1,
+            padx=18, pady=10,
+        )
+        jf.grid(row=jobs_row, column=0, columnspan=2, padx=16, pady=(0, 8), sticky="ew")
+        tk.Label(jf, text="Running Jobs", bg=COLORS["card"], fg=COLORS["warning"],
+                 font=("Helvetica", self._sf(12), "bold")).pack(anchor="w")
+        jobs_list_frame = tk.Frame(jf, bg=COLORS["card"])
+        jobs_list_frame.pack(fill=tk.X, pady=(6, 0))
+        self._jobs_card_frame = jf
+        self._jobs_list_frame = jobs_list_frame
+
         pool_rows_total = math.ceil(num_pools / 2)
         sh = self.root.winfo_screenheight()
         sw = self.root.winfo_screenwidth()
@@ -998,6 +1018,42 @@ class TrueMonClientApp:
             width = self._base_w
         self.root.geometry(f"{width}x{new_height}")
         self.root.minsize(min(560, sw - 80), min(400, sh - 80))
+
+    def _update_jobs_card(self, jobs):
+        """Refresh the running jobs list inside the jobs card."""
+        lf = getattr(self, "_jobs_list_frame", None)
+        if lf is None:
+            return
+        for w in lf.winfo_children():
+            w.destroy()
+        if not jobs:
+            tk.Label(lf, text="No active jobs", bg=COLORS["card"],
+                     fg=COLORS["text_dim"],
+                     font=("Helvetica", self._sf(10))).pack(anchor="w")
+            return
+        for job in jobs:
+            method = job.get("method", "")
+            desc = job.get("description", "") or method
+            pct = min(100.0, max(0.0, float(job.get("progress") or 0)))
+
+            row = tk.Frame(lf, bg=COLORS["card"])
+            row.pack(fill=tk.X, pady=(0, 6))
+
+            hdr = tk.Frame(row, bg=COLORS["card"])
+            hdr.pack(fill=tk.X)
+            tk.Label(hdr, text=method, bg=COLORS["card"], fg=COLORS["warning"],
+                     font=("Courier", self._sf(10), "bold")).pack(side=tk.LEFT)
+            tk.Label(hdr, text=f"{pct:.1f}%", bg=COLORS["card"], fg=COLORS["warning"],
+                     font=("Courier", self._sf(10))).pack(side=tk.RIGHT)
+
+            bar_var = tk.DoubleVar(value=pct)
+            ttk.Progressbar(row, variable=bar_var, maximum=100,
+                            style="Poolyellow.Horizontal.TProgressbar",
+                            length=220).pack(fill=tk.X, pady=(2, 0))
+
+            if desc and desc != method:
+                tk.Label(row, text=desc, bg=COLORS["card"], fg=COLORS["text_dim"],
+                         font=("Helvetica", self._sf(9))).pack(anchor="w")
 
     def _show_drive_map(self, pool_name, topology):
         """Open a popup window showing the vdev/drive layout of a pool."""
@@ -1779,6 +1835,9 @@ class TrueMonClientApp:
                     card["map_btn"].config(
                         command=lambda n=name, t=topo: self._show_drive_map(n, t))
 
+        # Running jobs
+        self._update_jobs_card(s.get("jobs", []))
+
         self._check_alerts(s)
 
     # --- demo mode ---
@@ -1863,6 +1922,16 @@ class TrueMonClientApp:
                     round(self._demo_cpu / 40, 2),
                 ],
                 "pools": demo_pools,
+                "jobs": [
+                    {"id": 1, "method": "pool.scrub",
+                     "description": "Scrubbing pool 'tank'",
+                     "progress": round((self._demo_cpu * 0.7) % 100, 1),
+                     "state": "RUNNING"},
+                    {"id": 2, "method": "pool.resilver",
+                     "description": "Resilvering pool 'backup'",
+                     "progress": round((self._demo_cpu * 1.3) % 100, 1),
+                     "state": "RUNNING"},
+                ],
             }
             self.root.after(0, lambda s=stats: self._refresh(s))
             time.sleep(2)

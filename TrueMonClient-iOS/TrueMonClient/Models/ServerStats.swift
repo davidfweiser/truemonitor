@@ -15,6 +15,7 @@ struct ServerStats: Codable {
     let uptime: String?
     let loadavg: [Double]?
     let pools: [PoolInfo]?
+    let jobs: [JobInfo]?
     let systemAlerts: [SystemAlert]?
     let clearAlertsAt: Double?
 
@@ -29,8 +30,16 @@ struct ServerStats: Codable {
         case netIface     = "net_iface"
         case systemAlerts = "system_alerts"
         case clearAlertsAt = "clear_alerts_at"
-        case hostname, version, uptime, loadavg, pools
+        case hostname, version, uptime, loadavg, pools, jobs
     }
+}
+
+struct JobInfo: Codable, Identifiable {
+    let id: Int
+    let method: String
+    let description: String?
+    let progress: Double
+    let state: String
 }
 
 struct PoolInfo: Codable, Identifiable {
