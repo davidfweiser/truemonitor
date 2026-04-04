@@ -523,6 +523,9 @@ class TrueNASClient:
     def get_pools(self):
         return self._call("pool.query")
 
+    def get_dataset(self, name):
+        return self._call("pool.dataset.query", [[["id", "=", name]]])
+
     def get_reporting_data(self, graphs):
         now   = datetime.now(timezone.utc)
         start = now - timedelta(seconds=120)
@@ -825,14 +828,27 @@ class TrueNASClient:
                     vdev_map[topo_key] = vdev_list
 
                 if total and allocated is not None:
-                    # Use total - free for accurate usage (includes snapshots/overhead)
-                    # Fall back to allocated if free is unavailable
-                    used_space = (total - free) if free is not None else allocated
+                    # Query root dataset for true used space (includes snapshots)
+                    pool_name = p.get("name", "")
+                    used_space = allocated
+                    avail_space = free if free is not None else (total - allocated)
+                    try:
+                        ds_result = self.get_dataset(pool_name)
+                        if ds_result and isinstance(ds_result, list) and ds_result:
+                            ds = ds_result[0]
+                            ds_used = ds.get("used", {})
+                            if isinstance(ds_used, dict):
+                                ds_used = ds_used.get("rawvalue") or ds_used.get("value")
+                            if ds_used is not None:
+                                used_space = int(ds_used)
+                                avail_space = total - used_space
+                    except Exception:
+                        pass
                     pct = round(used_space / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
-                        "name": p.get("name", "unknown"),
+                        "name": pool_name or "unknown",
                         "used": used_space,
-                        "available": free if free is not None else (total - allocated),
+                        "available": avail_space,
                         "total": total,
                         "percent": pct,
                         "disks": disks,
