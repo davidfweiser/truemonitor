@@ -468,6 +468,9 @@ class TrueNASClient:
     def get_dataset(self, name):
         return self._call("pool.dataset.query", [[["id", "=", name]]])
 
+    def get_jobs(self):
+        return self._call("core.get_jobs", [[["state", "in", ["RUNNING", "WAITING"]]]])
+
     def get_reporting_data(self, graphs):
         now = datetime.now(timezone.utc)
         start = now - timedelta(seconds=120)
@@ -743,6 +746,27 @@ class TrueNASClient:
                     })
         except Exception as e:
             debug(f" pool error: {e}")
+
+        stats["jobs"] = []
+        try:
+            raw_jobs = self.get_jobs()
+            if isinstance(raw_jobs, list):
+                for job in raw_jobs:
+                    if not isinstance(job, dict):
+                        continue
+                    prog = job.get("progress") or {}
+                    desc = (job.get("description") or
+                            prog.get("description") or
+                            job.get("method", ""))
+                    stats["jobs"].append({
+                        "id": job.get("id"),
+                        "method": job.get("method", ""),
+                        "description": desc,
+                        "progress": float(prog.get("percent") or 0),
+                        "state": job.get("state", "RUNNING"),
+                    })
+        except Exception as e:
+            debug(f" jobs error: {e}")
 
         stats["system_alerts"] = []
         try:
@@ -1408,6 +1432,91 @@ a { color: var(--cyan); }
   50% { box-shadow: 0 0 8px currentColor; }
 }
 
+/* === JOBS CARD === */
+#jobs-section { padding: 0 16px 16px; }
+
+.jobs-card {
+  background: rgba(10, 18, 40, 0.85);
+  border: 1px solid rgba(255, 176, 0, 0.12);
+  border-radius: 14px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+}
+
+.jobs-card::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle, rgba(255,176,0,0.03) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.jobs-card:hover {
+  border-color: rgba(255,176,0,0.25);
+  box-shadow: 0 0 25px rgba(255,176,0,0.06);
+}
+
+.jobs-header {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+.jobs-empty {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.job-row { margin-bottom: 12px; }
+.job-row:last-child { margin-bottom: 0; }
+
+.job-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.job-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+}
+
+.job-desc {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-pct {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  color: var(--gold);
+  text-shadow: 0 0 8px var(--gold);
+}
+
+.job-row .progress-track { background: rgba(255,176,0,0.06); }
+.job-row .progress-fill {
+  background: linear-gradient(90deg, rgba(255,176,0,0.6), var(--gold));
+  box-shadow: 0 0 10px rgba(255,176,0,0.4);
+  transition: width 0.5s ease;
+}
+
 /* === ALERTS TAB === */
 #tab-alerts {
   position: relative; z-index: 10;
@@ -1817,6 +1926,13 @@ a { color: var(--cyan); }
   </div>
   <!-- Pool cards -->
   <div id="pool-section"><div class="pool-grid" id="pool-grid"></div></div>
+  <!-- Jobs card -->
+  <div id="jobs-section" style="display:none">
+    <div class="jobs-card">
+      <div class="jobs-header">&#9881; ACTIVE JOBS</div>
+      <div id="jobs-list"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ALERTS TAB -->
@@ -2028,6 +2144,7 @@ function handleStats(s) {
   updateNet(s.net_rx, s.net_tx, s.net_iface, s.net_history_rx, s.net_history_tx);
   updateTemp(s.cpu_temp, s.temp_history);
   updatePools(s.pools || []);
+  updateJobs(s.jobs || []);
   document.getElementById('footer').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
 }
 
@@ -2328,6 +2445,55 @@ function updatePoolCard(card, pool) {
     pd.appendChild(ind);
   });
   if (pool.topology) { window['_topo_'+n] = pool.topology; }
+}
+
+// --- Jobs card ---
+function updateJobs(jobs) {
+  var section = document.getElementById('jobs-section');
+  var list = document.getElementById('jobs-list');
+  if (!jobs || jobs.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  while (list.firstChild) list.removeChild(list.firstChild);
+  jobs.forEach(function(job) {
+    var pct = Math.min(100, Math.max(0, job.progress || 0));
+    var method = (job.method || '').replace(/\./g, '.\u200b');
+    var desc = job.description || job.method || '';
+
+    var row = document.createElement('div');
+    row.className = 'job-row';
+
+    var hdr = document.createElement('div');
+    hdr.className = 'job-header-row';
+    var nameEl = document.createElement('span');
+    nameEl.className = 'job-name';
+    nameEl.textContent = method;
+    var pctEl = document.createElement('span');
+    pctEl.className = 'job-pct';
+    pctEl.textContent = pct.toFixed(1) + '%';
+    hdr.appendChild(nameEl);
+    hdr.appendChild(pctEl);
+    row.appendChild(hdr);
+
+    var track = document.createElement('div');
+    track.className = 'progress-track';
+    var fill = document.createElement('div');
+    fill.className = 'progress-fill';
+    fill.style.width = pct + '%';
+    track.appendChild(fill);
+    row.appendChild(track);
+
+    if (desc && desc !== job.method) {
+      var descEl = document.createElement('div');
+      descEl.className = 'job-desc';
+      descEl.textContent = desc;
+      row.appendChild(descEl);
+    }
+
+    list.appendChild(row);
+  });
 }
 
 // --- Drive Map ---
@@ -3264,6 +3430,12 @@ class TrueMonitorWebApp:
                 "loadavg": [round(self._demo_cpu/25, 2), round(self._demo_cpu/30, 2),
                             round(self._demo_cpu/40, 2)],
                 "pools": demo_pools, "system_alerts": [],
+                "jobs": [
+                    {"id": 1, "method": "pool.scrub", "description": "Scrubbing pool 'tank'",
+                     "progress": round((self._demo_cpu * 0.7) % 100, 1), "state": "RUNNING"},
+                    {"id": 2, "method": "pool.resilver", "description": "Resilvering pool 'backup'",
+                     "progress": round((self._demo_cpu * 1.3) % 100, 1), "state": "RUNNING"},
+                ],
             }
             self._process_stats(stats)
             time.sleep(2)

@@ -506,6 +506,9 @@ class TrueNASClient:
     def get_dataset(self, name):
         return self._call("pool.dataset.query", [[["id", "=", name]]])
 
+    def get_jobs(self):
+        return self._call("core.get_jobs", [[["state", "in", ["RUNNING", "WAITING"]]]])
+
     def get_reporting_data(self, graphs):
         now   = datetime.now(timezone.utc)
         start = now - timedelta(seconds=120)
@@ -758,6 +761,27 @@ class TrueNASClient:
                     })
         except Exception as e:
             debug(f" pool error: {e}")
+
+        stats["jobs"] = []
+        try:
+            raw_jobs = self.get_jobs()
+            if isinstance(raw_jobs, list):
+                for job in raw_jobs:
+                    if not isinstance(job, dict):
+                        continue
+                    prog = job.get("progress") or {}
+                    desc = (job.get("description") or
+                            prog.get("description") or
+                            job.get("method", ""))
+                    stats["jobs"].append({
+                        "id": job.get("id"),
+                        "method": job.get("method", ""),
+                        "description": desc,
+                        "progress": float(prog.get("percent") or 0),
+                        "state": job.get("state", "RUNNING"),
+                    })
+        except Exception as e:
+            debug(f" jobs error: {e}")
 
         stats["system_alerts"] = []
         try:
@@ -1487,6 +1511,28 @@ def draw_monitor(win, state, config):
                         put(win, row, dx, tag, attr)
                         dx += len(tag)
                     row += 1
+
+    jobs = s.get("jobs", [])
+    if jobs and row < my - 4:
+        row += 1
+        put(win, row, 0, "  RUNNING JOBS",
+            curses.color_pair(C_WARN) | curses.A_BOLD)
+        row += 1
+        hline(win, row, dim | curses.A_DIM)
+        row += 1
+        for job in jobs:
+            if row >= my - 3:
+                break
+            method = job.get("method", "")
+            desc   = job.get("description", "") or method
+            pct    = min(100.0, max(0.0, float(job.get("progress") or 0)))
+            put(win, row, 2,  f"{method:<28}", curses.color_pair(C_WARN))
+            put(win, row, 31, f"{pct:5.1f}%  ", 0)
+            put(win, row, 39, _bar(pct, 16), curses.color_pair(C_WARN))
+            row += 1
+            if desc and desc != method and row < my - 3:
+                put(win, row, 4, desc[:mx - 6], dim | curses.A_DIM)
+                row += 1
 
     draw_hint(win, "ESC  \u2014  Back to menu")
 
