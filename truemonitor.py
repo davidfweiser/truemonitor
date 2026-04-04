@@ -825,11 +825,14 @@ class TrueNASClient:
                     vdev_map[topo_key] = vdev_list
 
                 if total and allocated is not None:
-                    pct = round(allocated / total * 100, 1) if total > 0 else 0
+                    # Use total - free for accurate usage (includes snapshots/overhead)
+                    # Fall back to allocated if free is unavailable
+                    used_space = (total - free) if free is not None else allocated
+                    pct = round(used_space / total * 100, 1) if total > 0 else 0
                     stats["pools"].append({
                         "name": p.get("name", "unknown"),
-                        "used": allocated,
-                        "available": free or (total - allocated),
+                        "used": used_space,
+                        "available": free if free is not None else (total - allocated),
                         "total": total,
                         "percent": pct,
                         "disks": disks,
